@@ -213,13 +213,15 @@ else:
                     df_visualizza[colonne_visibili], 
                     use_container_width=True, 
                     hide_index=True,
-                    selection_mode="single_row", # Permette di selezionare una riga alla volta
-                    on_select="rerun"            # Riavvia l'app non appena l'utente clicca
+                    selection_mode="single_row", 
+                    on_select="rerun"            
                 )
                 
-                # Se l'utente clicca su una riga, salviamo il DDT e ricarichiamo la pagina
-                if selezione and selection.get("selection", {}).get("rows"):
-                    indice_riga_selezionata = selection["selection"]["rows"][0]
+                # Controllo corretto della riga cliccata
+                righe_selezionate = selezione.selection.rows
+                
+                if righe_selezionate:
+                    indice_riga_selezionata = righe_selezionate[0]
                     ddt_scelto = df_visualizza.iloc[indice_riga_selezionata]['DDT']
                     st.session_state["ddt_selezionato"] = ddt_scelto
                     st.rerun()
