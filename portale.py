@@ -5,6 +5,14 @@ import gspread
 from oauth2client.service_account import ServiceAccountCredentials
 
 st.set_page_config(page_title="Portale Fornitori - Tracking", page_icon="🌐", layout="wide")
+nascondi_menu = """
+    <style>
+    #MainMenu {visibility: hidden;}
+    footer {visibility: hidden;}
+    header {visibility: hidden;}
+    </style>
+    """
+st.markdown(nascondi_menu, unsafe_allow_html=True)
 
 # --- CONNESSIONE A GOOGLE SHEETS ---
 def connetti_google_sheets():
