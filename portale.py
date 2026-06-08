@@ -3,11 +3,12 @@ import pandas as pd
 import json
 import gspread
 from oauth2client.service_account import ServiceAccountCredentials
+from geopy.geocoders import Nominatim
 
 # --- CONFIGURAZIONE PAGINA ---
 st.set_page_config(page_title="Portale Fornitori - Tracking", page_icon="🌐", layout="wide")
 
-# --- NASCONDI INTERFACCIA STREAMLIT (Linguetta superiore, footer, pulsanti di dev) ---
+# --- NASCONDI INTERFACCIA STREAMLIT ---
 nascondi_menu = """
     <style>
     [data-testid="stToolbar"] {visibility: hidden !important;}
@@ -18,6 +19,27 @@ nascondi_menu = """
     </style>
     """
 st.markdown(nascondi_menu, unsafe_allow_html=True)
+
+# --- FUNZIONE REVERSE GEOCODING (Da coordinate a Indirizzo) ---
+@st.cache_data(ttl=86400)  # Memorizza il risultato per 24 ore per non rallentare l'app
+def traduci_gps_in_indirizzo(coordinate_gps):
+    # Ritorna subito N/D se la cella è vuota o non valida
+    if not coordinate_gps or str(coordinate_gps).strip() in ["N/D", "Non disponibile", ""]:
+        return "Posizione non registrata"
+    
+    try:
+        # Inizializza il geolocalizzatore gratuito
+        geolocator = Nominatim(user_agent="manetti_logistica_tracker")
+        # Converte la stringa "lat, lng" nell'oggetto indirizzo
+        location = geolocator.reverse(str(coordinate_gps), timeout=10)
+        if location and location.address:
+            # Ritorna l'indirizzo accorciato (prende i primi componenti più rilevanti)
+            parti = location.address.split(",")
+            return ", ".join(parti[:4]).strip()
+        return str(coordinate_gps)
+    except Exception:
+        # Se il servizio è temporaneamente offline o le coordinate sono malformate, mostra il dato grezzo
+        return str(coordinate_gps)
 
 # --- CONNESSIONE A GOOGLE SHEETS ---
 def connetti_google_sheets():
@@ -37,7 +59,6 @@ def verifica_login(username, password, doc_google):
         foglio_fornitori = doc_google.worksheet("Fornitori")
         dati_fornitori = pd.DataFrame(foglio_fornitori.get_all_records())
         
-        # Filtra per verificare se le credenziali corrispondono
         utente = dati_fornitori[(dati_fornitori['Username'] == username) & (dati_fornitori['Password'] == str(password))]
         
         if not utente.empty:
@@ -87,7 +108,6 @@ if not st.session_state["autenticato"]:
 # 2. AREA RISERVATA (UTENTE AUTENTICATO)
 # ==========================================
 else:
-    # Barra superiore con Titolo e Bottone Esci
     col_titolo, col_logout = st.columns([4, 1])
     with col_titolo:
         st.title(f"📦 Portale Spedizioni: {st.session_state['fornitore_nome']}")
@@ -108,10 +128,8 @@ else:
                 foglio_spedizioni = doc_google.worksheet("Spedizioni")
                 df_totale = pd.DataFrame(foglio_spedizioni.get_all_records())
                 
-                # Applica il filtro di sicurezza per il fornitore loggato
                 if 'Fornitore' in df_totale.columns:
                     df_filtrato = df_totale[df_totale['Fornitore'] == st.session_state["fornitore_nome"]]
-                    # Capovolge l'ordine (righe più nuove di Google Fogli in alto)
                     df_filtrato = df_filtrato.iloc[::-1]
                 else:
                     df_filtrato = pd.DataFrame()
@@ -130,48 +148,55 @@ else:
             if not pacco.empty:
                 pacco = pacco.iloc[0]
                 
-                # Bottone per tornare alla Tabella principale
                 if st.button("⬅️ Torna alla lista delle spedizioni"):
                     st.session_state["ddt_selezionato"] = None
                     st.rerun()
                 
                 st.markdown(f"## Dettaglio Spedizione DDT: **{pacco['DDT']}**")
                 
-                # Scheda riassuntiva info pacco
                 col_info1, col_info2 = st.columns(2)
                 with col_info1:
                     st.markdown(f"👤 **Destinatario:** {pacco.get('Destinatario', 'N/D')}")
-                    st.markdown(f"📍 **Indirizzo di Consegna:** {pacco.get('Indirizzo', 'N/D')}")
+                    st.markdown(f"📍 **Indirizzo di Destinazione:** {pacco.get('Indirizzo', 'N/D')}")
                 with col_info2:
-                    st.markdown(f"⚖️ **Peso Lordo Spedizione:** {pacco.get('Peso Lordo', 'N/D')} kg")
+                    st.markdown(f"⚖️ **Peso Lordo:** {pacco.get('Peso Lordo', 'N/D')} kg")
                     st.markdown(f"🏷️ **Stato Attuale:** `{pacco.get('Stato', 'N/D')}`")
                 
                 st.divider()
-                st.subheader("🕒 Cronologia e Storico Stati")
+                st.subheader("🕒 Cronologia e Storico Stati (Con tracciamento posizioni)")
                 
+                # --- RECUPERO DATI GREZZI ---
                 stato_attuale = pacco.get('Stato', '')
-                posizione_gps = pacco.get('Posizione', 'Non disponibile')
+                ora_mag = pacco.get('Ora_Magazzino', 'N/D')
+                ora_car = pacco.get('Ora_Carico', 'N/D')
+                ora_esi = pacco.get('Ora_Esito', 'N/D')
                 
-                # COSTRUZIONE TIMELINE GRAFICA
+                # --- TRADUZIONE GPS IN INDIRIZZI REALI ---
+                with st.spinner("Decodifica posizioni geografiche..."):
+                    indirizzo_mag = traduci_gps_in_indirizzo(pacco.get('GPS_Magazzino', ''))
+                    indirizzo_car = traduci_gps_in_indirizzo(pacco.get('GPS_Carico', ''))
+                    indirizzo_esi = traduci_gps_in_indirizzo(pacco.get('GPS_Esito', ''))
+                
+                # --- COSTRUZIONE TIMELINE ---
                 if stato_attuale == "Eliminato":
                     st.error(f"❌ **Eliminato** — La spedizione è stata annullata o rimossa dal magazzino.")
                 else:
                     # Passo 3: Esito finale su strada
                     if stato_attuale == "Consegnato":
-                        st.success(f"✅ **CONSEGNATO**<br>📍 Coordinate GPS: {posizione_gps}", unsafe_allow_html=True)
+                        st.success(f"✅ **CONSEGNATO**<br>🕒 Ora: {ora_esi}<br>📍 Luogo evento: {indirizzo_esi}", unsafe_allow_html=True)
                         st.markdown("  ▲<br>  │", unsafe_allow_html=True)
                     elif stato_attuale == "Respinto":
-                        st.error(f"⚠️ **RESPINTO DAL CLIENTE**<br>📍 Coordinate GPS: {posizione_gps}", unsafe_allow_html=True)
+                        st.error(f"⚠️ **RESPINTO DAL CLIENTE**<br>🕒 Ora: {ora_esi}<br>📍 Luogo evento: {indirizzo_esi}", unsafe_allow_html=True)
                         st.markdown("  ▲<br>  │", unsafe_allow_html=True)
                         
                     # Passo 2: Presa in carico furgone
                     if stato_attuale in ["In Carico", "Consegnato", "Respinto"]:
-                        st.info(f"🚚 **IN CONSEGNA (Sul furgone)** — Il corriere ha preso in carico il pacco per la consegna.")
+                        st.info(f"🚚 **IN CONSEGNA (Sul furgone)**<br>🕒 Ora: {ora_car}<br>📍 Luogo evento: {indirizzo_car}", unsafe_allow_html=True)
                         st.markdown("  ▲<br>  │", unsafe_allow_html=True)
                         
                     # Passo 1: Stoccaggio iniziale hub
                     if stato_attuale in ["In Magazzino", "In Carico", "Consegnato", "Respinto"]:
-                        st.warning(f"🏢 **IN MAGAZZINO** — Il pacco è arrivato ed è stato elaborato nell'hub logistico.")
+                        st.warning(f"🏢 **IN MAGAZZINO**<br>🕒 Ora: {ora_mag}<br>📍 Luogo Hub: {indirizzo_mag}", unsafe_allow_html=True)
             else:
                 st.error("Errore: Spedizione non trovata.")
                 st.session_state["ddt_selezionato"] = None
@@ -183,7 +208,6 @@ else:
             if df_filtrato.empty:
                 st.info("Nessuna spedizione trovata per il tuo account.")
             else:
-                # Piccolo Dashboard contatori veloci
                 st.subheader("Stato Attuale delle Spedizioni")
                 totali = len(df_filtrato)
                 consegnati = len(df_filtrato[df_filtrato['Stato'] == 'Consegnato'])
@@ -198,7 +222,6 @@ else:
                 
                 st.divider()
                 
-                # Barra di ricerca dinamica
                 st.subheader("Elenco Spedizioni")
                 cerca_ddt = st.text_input("Filtra la tabella inserendo il numero di DDT o il nome del Destinatario:")
                 
@@ -215,33 +238,24 @@ else:
                 if df_visualizza.empty:
                     st.warning("Nessuna spedizione corrisponde ai criteri di ricerca.")
                 else:
-                    # --- DISEGNO DELLA GRIGLIA TABELLARE CUSTOM ---
-                    
-                    # Intestazioni delle colonne (Struttura fissa)
                     col_h1, col_h2, col_h3, col_h4 = st.columns([2, 3, 2, 1.5])
                     col_h1.markdown("**Numero DDT**")
                     col_h2.markdown("**Ragione Sociale / Destinatario**")
                     col_h3.markdown("**Stato Spedizione**")
                     col_h4.markdown("**Azioni**")
                     
-                    # Linea marcata sotto l'intestazione
                     st.markdown("<hr style='margin: 4px 0px 12px 0px; border-bottom: 2px solid #4F4F4F;'>", unsafe_allow_html=True)
                     
-                    # Generazione ciclica delle righe di dati
                     for index, pacco in df_visualizza.iterrows():
                         c1, c2, c3, c4 = st.columns([2, 3, 2, 1.5])
                         
-                        # Mostra i testi allineandoli verticalmente al pulsante tramite un micro-style CSS
                         c1.markdown(f"<p style='margin-top:8px;'>{pacco.get('DDT', 'N/D')}</p>", unsafe_allow_html=True)
                         c2.markdown(f"<p style='margin-top:8px;'>{pacco.get('Destinatario', 'N/D')}</p>", unsafe_allow_html=True)
                         c3.markdown(f"<p style='margin-top:8px;'>`{pacco.get('Stato', '')}`</p>", unsafe_allow_html=True)
                         
-                        # Il pulsante di azione che sostituisce la checkbox per aprire la vista di dettaglio
                         with c4:
-                            # Generiamo una chiave unica concatenando il DDT e l'indice di riga per evitare conflitti in Streamlit
                             if st.button("Apri ➔", key=f"btn_{pacco.get('DDT', index)}", use_container_width=True):
                                 st.session_state["ddt_selezionato"] = pacco['DDT']
                                 st.rerun()
                         
-                        # Linea grigia chiarissima per dividere visivamente i record del database
                         st.markdown("<hr style='margin: 6px 0px; opacity: 0.15;'>", unsafe_allow_html=True)
