@@ -136,4 +136,118 @@ else:
                 pacco = pacco.iloc[0]
                 
                 # Bottone per tornare alla Tabella principale
-                if st.button("
+                if st.button("⬅️ Torna alla lista delle spedizioni"):
+                    st.session_state["ddt_selezionato"] = None
+                    st.rerun()
+                
+                st.markdown(f"## Dettaglio Spedizione DDT: **{pacco['DDT']}**")
+                
+                # Scheda riassuntiva info pacco
+                col_info1, col_info2 = st.columns(2)
+                with col_info1:
+                    st.markdown(f"👤 **Destinatario:** {pacco.get('Destinatario', 'N/D')}")
+                    st.markdown(f"📍 **Indirizzo di Consegna:** {pacco.get('Indirizzo', 'N/D')}")
+                with col_info2:
+                    st.markdown(f"⚖️ **Peso Lordo Spedizione:** {pacco.get('Peso Lordo', 'N/D')} kg")
+                    st.markdown(f"🏷️ **Stato Attuale:** `{pacco.get('Stato', 'N/D')}`")
+                
+                st.divider()
+                st.subheader("🕒 Cronologia e Storico Stati")
+                
+                # --- RECUPERO DATI TEMPORALI (Timeline Snella) ---
+                stato_attuale = pacco.get('Stato', '')
+                ora_car = pacco.get('Ora_Carico', 'N/D')
+                ora_esi = pacco.get('Ora_Esito', 'N/D')
+                
+                # --- COSTRUZIONE TIMELINE GRAFICA VELOCE ---
+                if stato_attuale == "Eliminato":
+                    st.error("❌ **Eliminato** — La spedizione è stata annullata o rimossa dal magazzino.")
+                else:
+                    # Passo 3: Esito finale su strada (Richiede Ora)
+                    if stato_attuale == "Consegnato":
+                        st.success(f"✅ **CONSEGNATO** \n🕒 Ora: {ora_esi}")
+                        st.markdown("  ▲<br>  │", unsafe_allow_html=True)
+                    elif stato_attuale == "Respinto":
+                        st.error(f"⚠️ **RESPINTO DAL CLIENTE** \n🕒 Ora: {ora_esi}")
+                        st.markdown("  ▲<br>  │", unsafe_allow_html=True)
+                        
+                    # Passo 2: Presa in carico furgone (Richiede Ora)
+                    if stato_attuale in ["In Carico", "Consegnato", "Respinto"]:
+                        st.info(f"🚚 **IN CONSEGNA (Sul furgone)** \n🕒 Ora: {ora_car}")
+                        st.markdown("  ▲<br>  │", unsafe_allow_html=True)
+                        
+                    # Passo 1: Stoccaggio iniziale hub (Solo testuale)
+                    if stato_attuale in ["In Magazzino", "In Carico", "Consegnato", "Respinto"]:
+                        st.warning("🏢 **IN MAGAZZINO** — Il pacco è arrivato ed è stato elaborato nell'hub logistico.")
+            else:
+                st.error("Errore: Spedizione non trovata.")
+                st.session_state["ddt_selezionato"] = None
+
+        # ==========================================
+        # VISTA B: TABELLA GENERALE PERSONALIZZATA
+        # ==========================================
+        else:
+            if df_filtrato.empty:
+                st.info("Nessuna spedizione trovata per il tuo account.")
+            else:
+                # Piccolo Dashboard contatori veloci
+                st.subheader("Stato Attuale delle Spedizioni")
+                totali = len(df_filtrato)
+                consegnati = len(df_filtrato[df_filtrato['Stato'] == 'Consegnato'])
+                in_viaggio = len(df_filtrato[df_filtrato['Stato'] == 'In Carico'])
+                anomalie = len(df_filtrato[df_filtrato['Stato'].isin(['Respinto', 'Eliminato'])])
+                
+                c1, c2, c3, c4 = st.columns(4)
+                c1.metric("Spedizioni Totali", totali)
+                c2.metric("✅ Consegnate", consegnati)
+                c3.metric("🚚 In Consegna", in_viaggio)
+                c4.metric("⚠️ Anomalie/Respinte", anomalie)
+                
+                st.divider()
+                
+                # Barra di ricerca dinamica
+                st.subheader("Elenco Spedizioni")
+                cerca_ddt = st.text_input("Filtra la tabella inserendo il numero di DDT o il nome del Destinatario:")
+                
+                if cerca_ddt:
+                    df_visualizza = df_filtrato[
+                        df_filtrato['DDT'].astype(str).str.contains(cerca_ddt, case=False, na=False) | 
+                        df_filtrato['Destinatario'].astype(str).str.contains(cerca_ddt, case=False, na=False)
+                    ]
+                else:
+                    df_visualizza = df_filtrato
+
+                st.markdown("<br>", unsafe_allow_html=True)
+
+                if df_visualizza.empty:
+                    st.warning("Nessuna spedizione corrisponde ai criteri di ricerca.")
+                else:
+                    # --- DISEGNO DELLA GRIGLIA TABELLARE CUSTOM ---
+                    
+                    # Intestazioni delle colonne
+                    col_h1, col_h2, col_h3, col_h4 = st.columns([2, 3, 2, 1.5])
+                    col_h1.markdown("**Numero DDT**")
+                    col_h2.markdown("**Ragione Sociale / Destinatario**")
+                    col_h3.markdown("**Stato Spedizione**")
+                    col_h4.markdown("**Azioni**")
+                    
+                    # Linea marcata sotto l'intestazione
+                    st.markdown("<hr style='margin: 4px 0px 12px 0px; border-bottom: 2px solid #4F4F4F;'>", unsafe_allow_html=True)
+                    
+                    # Generazione ciclica delle righe di dati
+                    for index, pacco in df_visualizza.iterrows():
+                        c1, c2, c3, c4 = st.columns([2, 3, 2, 1.5])
+                        
+                        # Mostra i testi allineandoli verticalmente al pulsante
+                        c1.markdown(f"<p style='margin-top:8px;'>{pacco.get('DDT', 'N/D')}</p>", unsafe_allow_html=True)
+                        c2.markdown(f"<p style='margin-top:8px;'>{pacco.get('Destinatario', 'N/D')}</p>", unsafe_allow_html=True)
+                        c3.markdown(f"<p style='margin-top:8px;'>`{pacco.get('Stato', '')}`</p>", unsafe_allow_html=True)
+                        
+                        # Il pulsante di azione che apre la vista di dettaglio
+                        with c4:
+                            if st.button("Apri ➔", key=f"btn_{pacco.get('DDT', index)}", use_container_width=True):
+                                st.session_state["ddt_selezionato"] = pacco['DDT']
+                                st.rerun()
+                        
+                        # Linea grigia chiarissima per dividere visivamente i record
+                        st.markdown("<hr style='margin: 6px 0px; opacity: 0.15;'>", unsafe_allow_html=True)
