@@ -208,7 +208,7 @@ else:
                     df_visualizza[colonne_visibili], 
                     use_container_width=True, 
                     hide_index=True,
-                    selection_mode="single_row", 
+                    selection_mode="single-row",  # <-- Sostituito il trattino basso con il trattino normale
                     on_select="rerun"            
                 )
                 
