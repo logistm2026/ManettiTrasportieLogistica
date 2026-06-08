@@ -71,6 +71,10 @@ if not st.session_state["autenticato"]:
 # AREA RISERVATA (LOGGED IN)
 # ==========================================
 else:
+    # Inizializziamo lo stato per il pacco selezionato se non esiste
+    if "ddt_selezionato" not in st.session_state:
+        st.session_state["ddt_selezionato"] = None
+
     # Barra superiore con informazioni di logout
     col_titolo, col_logout = st.columns([4, 1])
     with col_titolo:
@@ -80,6 +84,7 @@ else:
         if st.button("🚪 Esci", use_container_width=True):
             st.session_state["autenticato"] = False
             st.session_state["fornitore_nome"] = ""
+            st.session_state["ddt_selezionato"] = None
             st.rerun()
 
     st.divider()
@@ -91,57 +96,130 @@ else:
                 foglio_spedizioni = doc_google.worksheet("Spedizioni")
                 df_totale = pd.DataFrame(foglio_spedizioni.get_all_records())
                 
-                # Applica il filtro blindato: vedi solo i TUOI pacchi
-                # Se nella colonna 'Fornitore' c'è il nome del fornitore loggato, lo mostriamo
+                # Filtro blindato per fornitore
                 if 'Fornitore' in df_totale.columns:
                     df_filtrato = df_totale[df_totale['Fornitore'] == st.session_state["fornitore_nome"]]
+                    # Mette le righe più nuove in cima
+                    df_filtrato = df_filtrato.iloc[::-1]
                 else:
                     df_filtrato = pd.DataFrame()
-                    st.error("Errore di configurazione del database: Colonna 'Fornitore' non trovata.")
+                    st.error("Errore: Colonna 'Fornitore' non trovata.")
                 
             except Exception as e:
                 st.error(f"Errore nel caricamento delle spedizioni: {e}")
                 df_filtrato = pd.DataFrame()
 
-        if df_filtrato.empty:
-            st.info("Nessuna spedizione trovata per il tuo account.")
-        else:
-            # --- PICCOLO DASHBOARD RIASSUNTIVO ---
-            st.subheader("Stato Attuale delle Spedizioni")
+        # ==========================================
+        # VISTA 1: DETTAGLIO DELLA SPEDIZIONE SELEZIONATA
+        # ==========================================
+        if st.session_state["ddt_selezionato"] is not None:
+            # Recuperiamo i dati del pacco specifico
+            pacco = df_filtrato[df_filtrato['DDT'].astype(str) == str(st.session_state["ddt_selezionato"])]
             
-            # Calcolo dei contatori veloci
-            totali = len(df_filtrato)
-            consegnati = len(df_filtrato[df_filtrato['Stato'] == 'Consegnato'])
-            in_viaggio = len(df_filtrato[df_filtrato['Stato'] == 'In Carico'])
-            anomalie = len(df_filtrato[df_filtrato['Stato'].isin(['Respinto', 'Eliminato'])])
-            
-            c1, c2, c3, c4 = st.columns(4)
-            c1.metric("Spedizioni Totali", totali)
-            c2.metric("✅ Consegnate", consegnati)
-            c3.metric("🚚 In Consegna", in_viaggio)
-            c4.metric("⚠️ Anomalie/Respinte", anomalie)
-            
-            st.divider()
-            
-            # --- TABELLA DI RICERCA INTERATTIVA ---
-            st.subheader("Cerca Spedizione")
-            cerca_ddt = st.text_input("Inserisci DDT o Destinatario per filtrare la tabella:")
-            
-            # Filtro dinamico sulla tabella
-            if cerca_ddt:
-                df_visualizza = df_filtrato[
-                    df_filtrato['DDT'].astype(str).str.contains(cerca_ddt, case=False, na=False) | 
-                    df_filtrato['Destinatario'].astype(str).str.contains(cerca_ddt, case=False, na=False)
-                ]
+            if not pacco.empty:
+                pacco = pacco.iloc[0] # Estraiamo la riga come serie
+                
+                # Bottone per tornare indietro
+                if st.button("⬅️ Torna alla lista delle spedizioni"):
+                    st.session_state["ddt_selezionato"] = None
+                    st.rerun()
+                
+                st.markdown(f"## Dettaglio Spedizione DDT: **{pacco['DDT']}**")
+                
+                # Informazioni Generali del Pacco
+                col_info1, col_info2 = st.columns(2)
+                with col_info1:
+                    st.markdown(f"👤 **Destinatario:** {pacco.get('Destinatario', 'N/D')}")
+                    st.markdown(f"📍 **Indirizzo:** {pacco.get('Indirizzo', 'N/D')}")
+                with col_info2:
+                    st.markdown(f"⚖️ **Peso Lordo:** {pacco.get('Peso Lordo', 'N/D')} kg")
+                    st.markdown(f"🏷️ **Stato Corrente:** `{pacco.get('Stato', 'N/D')}`")
+                
+                st.divider()
+                st.subheader("🕒 Cronologia e Storico Stati")
+                
+                # --- COSTRUZIONE DELLA TIMELINE VISIVA ---
+                # Qui andiamo a leggere le colonne temporali dal tuo foglio.
+                # Se non le hai ancora create, il sistema mostrerà lo stato attuale.
+                
+                stato_attuale = pacco.get('Stato', '')
+                posizione_gps = pacco.get('Posizione', 'Non disponibile')
+                
+                # Esempio di Timeline basata sullo stato corrente.
+                # Se aggiungi colonne come 'Ora_In_Magazzino' sul foglio, potrai sostituire i testi qui sotto.
+                
+                if stato_attuale == "Eliminato":
+                    st.error(f"❌ **Eliminato** — La spedizione è stata annullata o rimossa.")
+                
+                else:
+                    # Step 3: Consegnato o Respinto
+                    if stato_attuale == "Consegnato":
+                        st.success(f"✅ **CONSEGNATO**<br>📍 Posizione GPS: {posizione_gps}", unsafe_allow_html=True)
+                        st.markdown("⬇️")
+                    elif stato_attuale == "Respinto":
+                        st.error(f"⚠️ **RESPINTO DAL CLIENTE**<br>📍 Posizione GPS: {posizione_gps}", unsafe_allow_html=True)
+                        st.markdown("⬇️")
+                        
+                    # Step 2: In Carico (Furgone)
+                    if stato_attuale in ["In Carico", "Consegnato", "Respinto"]:
+                        st.info(f"🚚 **IN CONSEGNA (Sul Furgone)** — Il corriere ha preso in carico il pacco.")
+                        st.markdown("⬇️")
+                        
+                    # Step 1: In Magazzino o Pacco Creato
+                    if stato_attuale in ["In Magazzino", "In Carico", "Consegnato", "Respinto"]:
+                        st.warning(f"🏢 **IN MAGAZZINO** — Il pacco è presente presso l'hub logistico.")
             else:
-                df_visualizza = df_filtrato
+                st.error("Spedizione non trovata.")
+                st.session_state["ddt_selezionato"] = None
 
-            # Pulizia colonne da mostrare al fornitore (nascondiamo l'ID_Pacco se è brutto o l'Ordinamento interno)
-            colonne_visibili = [col for col in ['DDT', 'Destinatario', 'Indirizzo', 'Peso Lordo', 'Stato'] if col in df_visualizza.columns]
-            
-            # Mostra la tabella formattata pulita ottimizzata per PC
-            st.dataframe(
-                df_visualizza[colonne_visibili], 
-                use_container_width=True, 
-                hide_index=True
-            )
+        # ==========================================
+        # VISTA 2: TABELLA GENERALE (LISTA)
+        # ==========================================
+        else:
+            if df_filtrato.empty:
+                st.info("Nessuna spedizione trovata per il tuo account.")
+            else:
+                # Dashboard contatori
+                st.subheader("Stato Attuale delle Spedizioni")
+                totali = len(df_filtrato)
+                consegnati = len(df_filtrato[df_filtrato['Stato'] == 'Consegnato'])
+                in_viaggio = len(df_filtrato[df_filtrato['Stato'] == 'In Carico'])
+                anomalie = len(df_filtrato[df_filtrato['Stato'].isin(['Respinto', 'Eliminato'])])
+                
+                c1, c2, c3, c4 = st.columns(4)
+                c1.metric("Spedizioni Totali", totali)
+                c2.metric("✅ Consegnate", consegnati)
+                c3.metric("🚚 In Consegna", in_viaggio)
+                c4.metric("⚠️ Anomalie/Respinte", anomalie)
+                
+                st.divider()
+                
+                # Ricerca
+                st.subheader("Elenco Spedizioni (Clicca su una riga per vedere lo storico)")
+                cerca_ddt = st.text_input("Cerca per DDT o Destinatario:")
+                
+                if cerca_ddt:
+                    df_visualizza = df_filtrato[
+                        df_filtrato['DDT'].astype(str).str.contains(cerca_ddt, case=False, na=False) | 
+                        df_filtrato['Destinatario'].astype(str).str.contains(cerca_ddt, case=False, na=False)
+                    ]
+                else:
+                    df_visualizza = df_filtrato
+
+                colonne_visibili = [col for col in ['DDT', 'Destinatario', 'Indirizzo', 'Peso Lordo', 'Stato'] if col in df_visualizza.columns]
+                
+                # TABELLA SELEZIONABILE COL MOUSE
+                selezione = st.dataframe(
+                    df_visualizza[colonne_visibili], 
+                    use_container_width=True, 
+                    hide_index=True,
+                    selection_mode="single_row", # Permette di selezionare una riga alla volta
+                    on_select="rerun"            # Riavvia l'app non appena l'utente clicca
+                )
+                
+                # Se l'utente clicca su una riga, salviamo il DDT e ricarichiamo la pagina
+                if selezione and selection.get("selection", {}).get("rows"):
+                    indice_riga_selezionata = selection["selection"]["rows"][0]
+                    ddt_scelto = df_visualizza.iloc[indice_riga_selezionata]['DDT']
+                    st.session_state["ddt_selezionato"] = ddt_scelto
+                    st.rerun()
