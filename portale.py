@@ -5,7 +5,23 @@ import gspread
 from oauth2client.service_account import ServiceAccountCredentials
 
 st.set_page_config(page_title="Portale Fornitori - Tracking", page_icon="🌐", layout="wide")
-
+nascondi_menu = """
+    <style>
+    /* Nasconde il menu a tendina, il logo GitHub e il tasto Deploy in alto a destra */
+    [data-testid="stToolbar"] {visibility: hidden !important;}
+    
+    /* Nasconde l'intera barra superiore trasparente */
+    [data-testid="stHeader"] {visibility: hidden !important;}
+    
+    /* Nasconde la linea colorata decorativa in alto (opzionale, ma rende tutto più pulito) */
+    [data-testid="stDecoration"] {visibility: hidden !important;}
+    
+    /* Nasconde il footer 'Made with Streamlit' a fondo pagina */
+    footer {visibility: hidden !important;}
+    [data-testid="stFooter"] {visibility: hidden !important;}
+    </style>
+    """
+st.markdown(nascondi_menu, unsafe_allow_html=True)
 # --- CONNESSIONE A GOOGLE SHEETS ---
 def connetti_google_sheets():
     try:
