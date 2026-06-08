@@ -169,8 +169,8 @@ else:
                 st.error("Spedizione non trovata.")
                 st.session_state["ddt_selezionato"] = None
 
-        # ==========================================
-        # VISTA 2: TABELLA GENERALE SELEZIONABILE
+       # ==========================================
+        # VISTA: LISTA CON RIGHE ESPANDIBILI
         # ==========================================
         else:
             if df_filtrato.empty:
@@ -190,7 +190,7 @@ else:
                 
                 st.divider()
                 
-                st.subheader("Elenco Spedizioni (Spunta la casella a sinistra di una riga per aprire i dettagli)")
+                st.subheader("Elenco Spedizioni (Clicca su una riga per espandere i dettagli)")
                 cerca_ddt = st.text_input("Cerca per DDT o Destinatario:")
                 
                 if cerca_ddt:
@@ -201,20 +201,52 @@ else:
                 else:
                     df_visualizza = df_filtrato
 
-                colonne_visibili = [col for col in ['DDT', 'Destinatario', 'Indirizzo', 'Peso Lordo', 'Stato'] if col in df_visualizza.columns]
-                
-                # LA TABELLA CLICCABILE
-                selezione = st.dataframe(
-                    df_visualizza[colonne_visibili], 
-                    use_container_width=True, 
-                    hide_index=True,
-                    selection_mode="single-row",  # <-- Sostituito il trattino basso con il trattino normale
-                    on_select="rerun"            
-                )
-                
-                # INTERCETTA IL CLICK SULLA CHECKBOX
-                if len(selezione.selection.rows) > 0:
-                    indice_riga_selezionata = selezione.selection.rows[0]
-                    ddt_scelto = df_visualizza.iloc[indice_riga_selezionata]['DDT']
-                    st.session_state["ddt_selezionato"] = ddt_scelto
-                    st.rerun()
+                st.markdown("<br>", unsafe_allow_html=True)
+
+                if df_visualizza.empty:
+                    st.warning("Nessuna spedizione corrisponde alla ricerca.")
+                else:
+                    # COSTRUZIONE DELLE RIGHE ESPANDIBILI
+                    for index, pacco in df_visualizza.iterrows():
+                        
+                        # Creiamo il testo che farà da "riga" della tabella (sempre visibile)
+                        ddt_val = pacco.get('DDT', 'N/D')
+                        dest_val = pacco.get('Destinatario', 'N/D')
+                        stato_val = pacco.get('Stato', 'N/D')
+                        
+                        # Qui impaginamo il titolo per farlo sembrare una riga di tabella ordinata
+                        titolo_riga = f"📦 DDT: {ddt_val}   |   👤 {dest_val}   |   🏷️ Stato: {stato_val}"
+                        
+                        # st.expander crea il rettangolo cliccabile che si apre a tendina
+                        with st.expander(titolo_riga):
+                            
+                            # --- DETTAGLI INTERNI CHE COMPAIONO ALL'APERTURA ---
+                            col_info1, col_info2 = st.columns(2)
+                            with col_info1:
+                                st.markdown(f"📍 **Indirizzo:** {pacco.get('Indirizzo', 'N/D')}")
+                            with col_info2:
+                                st.markdown(f"⚖️ **Peso Lordo:** {pacco.get('Peso Lordo', 'N/D')} kg")
+                            
+                            st.divider()
+                            st.markdown("#### 🕒 Cronologia e Storico Stati")
+                            
+                            stato_attuale = pacco.get('Stato', '')
+                            posizione_gps = pacco.get('Posizione', 'Non disponibile')
+                            
+                            # LA TIMELINE VISIVA
+                            if stato_attuale == "Eliminato":
+                                st.error(f"❌ **Eliminato** — La spedizione è stata annullata o rimossa.")
+                            else:
+                                if stato_attuale == "Consegnato":
+                                    st.success(f"✅ **CONSEGNATO**<br>📍 Posizione GPS: {posizione_gps}", unsafe_allow_html=True)
+                                    st.markdown("  ▲<br>  │", unsafe_allow_html=True)
+                                elif stato_attuale == "Respinto":
+                                    st.error(f"⚠️ **RESPINTO DAL CLIENTE**<br>📍 Posizione GPS: {posizione_gps}", unsafe_allow_html=True)
+                                    st.markdown("  ▲<br>  │", unsafe_allow_html=True)
+                                    
+                                if stato_attuale in ["In Carico", "Consegnato", "Respinto"]:
+                                    st.info(f"🚚 **IN CONSEGNA (Sul Furgone)** — Il corriere ha preso in carico il pacco.")
+                                    st.markdown("  ▲<br>  │", unsafe_allow_html=True)
+                                    
+                                if stato_attuale in ["In Magazzino", "In Carico", "Consegnato", "Respinto"]:
+                                    st.warning(f"🏢 **IN MAGAZZINO** — Il pacco è presente presso l'hub logistico.")
