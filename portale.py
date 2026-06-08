@@ -3,12 +3,11 @@ import pandas as pd
 import json
 import gspread
 from oauth2client.service_account import ServiceAccountCredentials
-from geopy.geocoders import Nominatim
 
 # --- CONFIGURAZIONE PAGINA ---
 st.set_page_config(page_title="Portale Fornitori - Tracking", page_icon="🌐", layout="wide")
 
-# --- NASCONDI INTERFACCIA STREAMLIT ---
+# --- NASCONDI INTERFACCIA STREAMLIT (Linguetta superiore, footer, pulsanti di dev) ---
 nascondi_menu = """
     <style>
     [data-testid="stToolbar"] {visibility: hidden !important;}
@@ -19,27 +18,6 @@ nascondi_menu = """
     </style>
     """
 st.markdown(nascondi_menu, unsafe_allow_html=True)
-
-# --- FUNZIONE REVERSE GEOCODING (Da coordinate a Indirizzo) ---
-@st.cache_data(ttl=86400)  # Memorizza il risultato per 24 ore per non rallentare l'app
-def traduci_gps_in_indirizzo(coordinate_gps):
-    # Ritorna subito N/D se la cella è vuota o non valida
-    if not coordinate_gps or str(coordinate_gps).strip() in ["N/D", "Non disponibile", ""]:
-        return "Posizione non registrata"
-    
-    try:
-        # Inizializza il geolocalizzatore gratuito
-        geolocator = Nominatim(user_agent="manetti_logistica_tracker")
-        # Converte la stringa "lat, lng" nell'oggetto indirizzo
-        location = geolocator.reverse(str(coordinate_gps), timeout=10)
-        if location and location.address:
-            # Ritorna l'indirizzo accorciato (prende i primi componenti più rilevanti)
-            parti = location.address.split(",")
-            return ", ".join(parti[:4]).strip()
-        return str(coordinate_gps)
-    except Exception:
-        # Se il servizio è temporaneamente offline o le coordinate sono malformate, mostra il dato grezzo
-        return str(coordinate_gps)
 
 # --- CONNESSIONE A GOOGLE SHEETS ---
 def connetti_google_sheets():
@@ -108,6 +86,7 @@ if not st.session_state["autenticato"]:
 # 2. AREA RISERVATA (UTENTE AUTENTICATO)
 # ==========================================
 else:
+    # Barra superiore con Titolo e Bottone Esci
     col_titolo, col_logout = st.columns([4, 1])
     with col_titolo:
         st.title(f"📦 Portale Spedizioni: {st.session_state['fornitore_nome']}")
@@ -127,15 +106,17 @@ else:
             try:
                 foglio_spedizioni = doc_google.worksheet("Spedizioni")
                 
-                # Leggiamo i dati come "Testo Puro" per mantenere intatte le virgole italiane
+                # TECNICA DI IMPORTAZIONE TESTO PURO: Salva le virgole dei pesi europei
                 dati_foglio = foglio_spedizioni.get_all_values()
                 if len(dati_foglio) > 0:
                     df_totale = pd.DataFrame(dati_foglio[1:], columns=dati_foglio[0])
                 else:
                     df_totale = pd.DataFrame()
                 
+                # Applica il filtro di sicurezza per il fornitore loggato
                 if 'Fornitore' in df_totale.columns:
                     df_filtrato = df_totale[df_totale['Fornitore'] == st.session_state["fornitore_nome"]]
+                    # Capovolge l'ordine (mostra le righe più nuove in alto)
                     df_filtrato = df_filtrato.iloc[::-1]
                 else:
                     df_filtrato = pd.DataFrame()
@@ -154,114 +135,5 @@ else:
             if not pacco.empty:
                 pacco = pacco.iloc[0]
                 
-                if st.button("⬅️ Torna alla lista delle spedizioni"):
-                    st.session_state["ddt_selezionato"] = None
-                    st.rerun()
-                
-                st.markdown(f"## Dettaglio Spedizione DDT: **{pacco['DDT']}**")
-                
-                col_info1, col_info2 = st.columns(2)
-                with col_info1:
-                    st.markdown(f"👤 **Destinatario:** {pacco.get('Destinatario', 'N/D')}")
-                    st.markdown(f"📍 **Indirizzo di Destinazione:** {pacco.get('Indirizzo', 'N/D')}")
-                with col_info2:
-                    st.markdown(f"⚖️ **Peso Lordo:** {pacco.get('Peso Lordo', 'N/D')} kg")
-                    st.markdown(f"🏷️ **Stato Attuale:** `{pacco.get('Stato', 'N/D')}`")
-                
-                st.divider()
-                st.subheader("🕒 Cronologia e Storico Stati (Con tracciamento posizioni)")
-                
-                # --- RECUPERO DATI GREZZI ---
-                stato_attuale = pacco.get('Stato', '')
-                ora_mag = pacco.get('Ora_Magazzino', 'N/D')
-                ora_car = pacco.get('Ora_Carico', 'N/D')
-                ora_esi = pacco.get('Ora_Esito', 'N/D')
-                
-                # --- TRADUZIONE GPS IN INDIRIZZI REALI ---
-                with st.spinner("Decodifica posizioni geografiche..."):
-                    indirizzo_mag = traduci_gps_in_indirizzo(pacco.get('GPS_Magazzino', ''))
-                    indirizzo_car = traduci_gps_in_indirizzo(pacco.get('GPS_Carico', ''))
-                    indirizzo_esi = traduci_gps_in_indirizzo(pacco.get('GPS_Esito', ''))
-                
-                # --- COSTRUZIONE TIMELINE ---
-                if stato_attuale == "Eliminato":
-                    st.error("❌ **Eliminato** — La spedizione è stata annullata o rimossa dal magazzino.")
-                else:
-                    # Passo 3: Esito finale su strada
-                    if stato_attuale == "Consegnato":
-                        st.success(f"✅ **CONSEGNATO** \n🕒 Ora: {ora_esi}  \n📍 Luogo evento: {indirizzo_esi}")
-                        st.markdown("  ▲<br>  │", unsafe_allow_html=True)
-                    elif stato_attuale == "Respinto":
-                        st.error(f"⚠️ **RESPINTO DAL CLIENTE** \n🕒 Ora: {ora_esi}  \n📍 Luogo evento: {indirizzo_esi}")
-                        st.markdown("  ▲<br>  │", unsafe_allow_html=True)
-                        
-                    # Passo 2: Presa in carico furgone
-                    if stato_attuale in ["In Carico", "Consegnato", "Respinto"]:
-                        st.info(f"🚚 **IN CONSEGNA (Sul furgone)** \n🕒 Ora: {ora_car}  \n📍 Luogo evento: {indirizzo_car}")
-                        st.markdown("  ▲<br>  │", unsafe_allow_html=True)
-                        
-                    # Passo 1: Stoccaggio iniziale hub
-                    if stato_attuale in ["In Magazzino", "In Carico", "Consegnato", "Respinto"]:
-                        st.warning(f"🏢 **IN MAGAZZINO** \n🕒 Ora: {ora_mag}  \n📍 Luogo Hub: {indirizzo_mag}")
-            else:
-                st.error("Errore: Spedizione non trovata.")
-                st.session_state["ddt_selezionato"] = None
-
-        # ==========================================
-        # VISTA B: TABELLA GENERALE PERSONALIZZATA
-        # ==========================================
-        else:
-            if df_filtrato.empty:
-                st.info("Nessuna spedizione trovata per il tuo account.")
-            else:
-                st.subheader("Stato Attuale delle Spedizioni")
-                totali = len(df_filtrato)
-                consegnati = len(df_filtrato[df_filtrato['Stato'] == 'Consegnato'])
-                in_viaggio = len(df_filtrato[df_filtrato['Stato'] == 'In Carico'])
-                anomalie = len(df_filtrato[df_filtrato['Stato'].isin(['Respinto', 'Eliminato'])])
-                
-                c1, c2, c3, c4 = st.columns(4)
-                c1.metric("Spedizioni Totali", totali)
-                c2.metric("✅ Consegnate", consegnati)
-                c3.metric("🚚 In Consegna", in_viaggio)
-                c4.metric("⚠️ Anomalie/Respinte", anomalie)
-                
-                st.divider()
-                
-                st.subheader("Elenco Spedizioni")
-                cerca_ddt = st.text_input("Filtra la tabella inserendo il numero di DDT o il nome del Destinatario:")
-                
-                if cerca_ddt:
-                    df_visualizza = df_filtrato[
-                        df_filtrato['DDT'].astype(str).str.contains(cerca_ddt, case=False, na=False) | 
-                        df_filtrato['Destinatario'].astype(str).str.contains(cerca_ddt, case=False, na=False)
-                    ]
-                else:
-                    df_visualizza = df_filtrato
-
-                st.markdown("<br>", unsafe_allow_html=True)
-
-                if df_visualizza.empty:
-                    st.warning("Nessuna spedizione corrisponde ai criteri di ricerca.")
-                else:
-                    col_h1, col_h2, col_h3, col_h4 = st.columns([2, 3, 2, 1.5])
-                    col_h1.markdown("**Numero DDT**")
-                    col_h2.markdown("**Ragione Sociale / Destinatario**")
-                    col_h3.markdown("**Stato Spedizione**")
-                    col_h4.markdown("**Azioni**")
-                    
-                    st.markdown("<hr style='margin: 4px 0px 12px 0px; border-bottom: 2px solid #4F4F4F;'>", unsafe_allow_html=True)
-                    
-                    for index, pacco in df_visualizza.iterrows():
-                        c1, c2, c3, c4 = st.columns([2, 3, 2, 1.5])
-                        
-                        c1.markdown(f"<p style='margin-top:8px;'>{pacco.get('DDT', 'N/D')}</p>", unsafe_allow_html=True)
-                        c2.markdown(f"<p style='margin-top:8px;'>{pacco.get('Destinatario', 'N/D')}</p>", unsafe_allow_html=True)
-                        c3.markdown(f"<p style='margin-top:8px;'>`{pacco.get('Stato', '')}`</p>", unsafe_allow_html=True)
-                        
-                        with c4:
-                            if st.button("Apri ➔", key=f"btn_{pacco.get('DDT', index)}", use_container_width=True):
-                                st.session_state["ddt_selezionato"] = pacco['DDT']
-                                st.rerun()
-                        
-                        st.markdown("<hr style='margin: 6px 0px; opacity: 0.15;'>", unsafe_allow_html=True)
+                # Bottone per tornare alla Tabella principale
+                if st.button("
