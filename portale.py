@@ -126,7 +126,13 @@ else:
         with st.spinner("Aggiornamento dati in corso..."):
             try:
                 foglio_spedizioni = doc_google.worksheet("Spedizioni")
-                df_totale = pd.DataFrame(foglio_spedizioni.get_all_records())
+                
+                # Leggiamo i dati come "Testo Puro" per mantenere intatte le virgole italiane
+                dati_foglio = foglio_spedizioni.get_all_values()
+                if len(dati_foglio) > 0:
+                    df_totale = pd.DataFrame(dati_foglio[1:], columns=dati_foglio[0])
+                else:
+                    df_totale = pd.DataFrame()
                 
                 if 'Fornitore' in df_totale.columns:
                     df_filtrato = df_totale[df_totale['Fornitore'] == st.session_state["fornitore_nome"]]
