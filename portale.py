@@ -179,24 +179,24 @@ else:
                 
                 # --- COSTRUZIONE TIMELINE ---
                 if stato_attuale == "Eliminato":
-                    st.error(f"❌ **Eliminato** — La spedizione è stata annullata o rimossa dal magazzino.")
+                    st.error("❌ **Eliminato** — La spedizione è stata annullata o rimossa dal magazzino.")
                 else:
                     # Passo 3: Esito finale su strada
                     if stato_attuale == "Consegnato":
-                        st.success(f"✅ **CONSEGNATO**<br>🕒 Ora: {ora_esi}<br>📍 Luogo evento: {indirizzo_esi}", unsafe_allow_html=True)
+                        st.success(f"✅ **CONSEGNATO** \n🕒 Ora: {ora_esi}  \n📍 Luogo evento: {indirizzo_esi}")
                         st.markdown("  ▲<br>  │", unsafe_allow_html=True)
                     elif stato_attuale == "Respinto":
-                        st.error(f"⚠️ **RESPINTO DAL CLIENTE**<br>🕒 Ora: {ora_esi}<br>📍 Luogo evento: {indirizzo_esi}", unsafe_allow_html=True)
+                        st.error(f"⚠️ **RESPINTO DAL CLIENTE** \n🕒 Ora: {ora_esi}  \n📍 Luogo evento: {indirizzo_esi}")
                         st.markdown("  ▲<br>  │", unsafe_allow_html=True)
                         
                     # Passo 2: Presa in carico furgone
                     if stato_attuale in ["In Carico", "Consegnato", "Respinto"]:
-                        st.info(f"🚚 **IN CONSEGNA (Sul furgone)**<br>🕒 Ora: {ora_car}<br>📍 Luogo evento: {indirizzo_car}", unsafe_allow_html=True)
+                        st.info(f"🚚 **IN CONSEGNA (Sul furgone)** \n🕒 Ora: {ora_car}  \n📍 Luogo evento: {indirizzo_car}")
                         st.markdown("  ▲<br>  │", unsafe_allow_html=True)
                         
                     # Passo 1: Stoccaggio iniziale hub
                     if stato_attuale in ["In Magazzino", "In Carico", "Consegnato", "Respinto"]:
-                        st.warning(f"🏢 **IN MAGAZZINO**<br>🕒 Ora: {ora_mag}<br>📍 Luogo Hub: {indirizzo_mag}", unsafe_allow_html=True)
+                        st.warning(f"🏢 **IN MAGAZZINO** \n🕒 Ora: {ora_mag}  \n📍 Luogo Hub: {indirizzo_mag}")
             else:
                 st.error("Errore: Spedizione non trovata.")
                 st.session_state["ddt_selezionato"] = None
