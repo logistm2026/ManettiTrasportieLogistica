@@ -194,9 +194,9 @@ else:
                 
                 st.divider()
                 
-                # Ricerca
-                st.subheader("Elenco Spedizioni (Clicca su una riga per vedere lo storico)")
-                cerca_ddt = st.text_input("Cerca per DDT o Destinatario:")
+               # Ricerca
+                st.subheader("🔍 Ricerca Spedizione")
+                cerca_ddt = st.text_input("Inserisci il numero di DDT o il nome del Destinatario:")
                 
                 if cerca_ddt:
                     df_visualizza = df_filtrato[
@@ -206,22 +206,52 @@ else:
                 else:
                     df_visualizza = df_filtrato
 
-                colonne_visibili = [col for col in ['DDT', 'Destinatario', 'Indirizzo', 'Peso Lordo', 'Stato'] if col in df_visualizza.columns]
-                
-                # TABELLA SELEZIONABILE COL MOUSE
-                selezione = st.dataframe(
-                    df_visualizza[colonne_visibili], 
-                    use_container_width=True, 
-                    hide_index=True,
-                    selection_mode="single_row", 
-                    on_select="rerun"            
-                )
-                
-                # Controllo corretto della riga cliccata
-                righe_selezionate = selezione.selection.rows
-                
-                if righe_selezionate:
-                    indice_riga_selezionata = righe_selezionate[0]
-                    ddt_scelto = df_visualizza.iloc[indice_riga_selezionata]['DDT']
-                    st.session_state["ddt_selezionato"] = ddt_scelto
-                    st.rerun()
+                st.divider()
+                st.subheader("📦 Elenco Spedizioni (Clicca su una riga per aprire i dettagli)")
+
+                if df_visualizza.empty:
+                    st.info("Nessuna spedizione trovata.")
+                else:
+                    # Creiamo una riga cliccabile "a fisarmonica" per ogni pacco
+                    for index, pacco in df_visualizza.iterrows():
+                        
+                        # Testo che appare sulla riga chiusa
+                        titolo_riga = f"DDT: {pacco.get('DDT', 'N/D')} ➔ {pacco.get('Destinatario', 'N/D')} | Stato: {pacco.get('Stato', '')}"
+                        
+                        # Il comando st.expander crea la riga cliccabile!
+                        with st.expander(titolo_riga):
+                            
+                            # --- CONTENUTO CHE APPARE QUANDO SI CLICCA LA RIGA ---
+                            col1, col2 = st.columns(2)
+                            with col1:
+                                st.markdown(f"📍 **Indirizzo:** {pacco.get('Indirizzo', 'N/D')}")
+                            with col2:
+                                st.markdown(f"⚖️ **Peso:** {pacco.get('Peso Lordo', 'N/D')} kg")
+                            
+                            st.divider()
+                            st.markdown("#### 🕒 Cronologia e Storico Stati")
+                            
+                            stato_attuale = pacco.get('Stato', '')
+                            posizione_gps = pacco.get('Posizione', 'Non disponibile')
+                            
+                            # --- LA TIMELINE VISIVA ---
+                            if stato_attuale == "Eliminato":
+                                st.error(f"❌ **Eliminato** — La spedizione è stata annullata o rimossa.")
+                            
+                            else:
+                                # Step 3 (Finale)
+                                if stato_attuale == "Consegnato":
+                                    st.success(f"✅ **CONSEGNATO**<br>📍 Posizione GPS: {posizione_gps}", unsafe_allow_html=True)
+                                    st.markdown("⬇️")
+                                elif stato_attuale == "Respinto":
+                                    st.error(f"⚠️ **RESPINTO DAL CLIENTE**<br>📍 Posizione GPS: {posizione_gps}", unsafe_allow_html=True)
+                                    st.markdown("⬇️")
+                                    
+                                # Step 2 (Sul Furgone)
+                                if stato_attuale in ["In Carico", "Consegnato", "Respinto"]:
+                                    st.info(f"🚚 **IN CONSEGNA (Sul furgone)** — Il corriere ha preso in carico il pacco.")
+                                    st.markdown("⬇️")
+                                    
+                                # Step 1 (In Magazzino)
+                                if stato_attuale in ["In Magazzino", "In Carico", "Consegnato", "Respinto"]:
+                                    st.warning(f"🏢 **IN MAGAZZINO** — Il pacco è presente presso l'hub logistico.")
