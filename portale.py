@@ -149,6 +149,7 @@ else:
                     st.markdown(f"📍 **Indirizzo di Consegna:** {pacco.get('Indirizzo', 'N/D')}")
                 with col_info2:
                     st.markdown(f"⚖️ **Peso Lordo Spedizione:** {pacco.get('Peso Lordo', 'N/D')} kg")
+                    st.markdown(f"📦 **Numero Colli:** {pacco.get('Colli', 'N/D')}")
                     st.markdown(f"🏷️ **Stato Attuale:** `{pacco.get('Stato', 'N/D')}`")
                 
                 st.divider()
@@ -156,7 +157,7 @@ else:
                 
                 # --- RECUPERO DATI TEMPORALI (Timeline Snella) ---
                 stato_attuale = pacco.get('Stato', '')
-                ora_car = pacco.get('Ora_Carico', 'N/D')
+                ora_car = pacco.get('Navigazione / Ora_Carico', pacco.get('Ora_Carico', 'N/D'))
                 ora_esi = pacco.get('Ora_Esito', 'N/D')
                 
                 # --- COSTRUZIONE TIMELINE GRAFICA VELOCE ---
@@ -188,7 +189,7 @@ else:
         # ==========================================
         else:
             if df_filtrato.empty:
-                st.info("Nessuna spedizione trovata per il tuo account.")
+                st.info("Nessuna spedizione trouvata per il tuo account.")
             else:
                 # Piccolo Dashboard contatori veloci
                 st.subheader("Stato Attuale delle Spedizioni")
@@ -249,5 +250,5 @@ else:
                                 st.session_state["ddt_selezionato"] = pacco['DDT']
                                 st.rerun()
                         
-                        # Linea grigia chiarissima per dividere visivamente i record
+                        # Linea grigia chiarissima per dividerive visivamente i record
                         st.markdown("<hr style='margin: 6px 0px; opacity: 0.15;'>", unsafe_allow_html=True)
