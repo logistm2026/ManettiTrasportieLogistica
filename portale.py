@@ -174,7 +174,7 @@ else:
                         
                     # Passo 2: Presa in carico furgone (Richiede Ora)
                     if stato_attuale in ["In Carico", "Consegnato", "Respinto"]:
-                        st.info(f"🚚 **IN CONSEGNA (Sul furgone)** \n🕒 Ora: {ora_car}")
+                        st.info(f"🚚 **IN CONSEGNA** \n🕒 Ora: {ora_car}")
                         st.markdown("  ▲<br>  │", unsafe_allow_html=True)
                         
                     # Passo 1: Stoccaggio iniziale hub (Solo testuale)
