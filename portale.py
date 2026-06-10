@@ -123,13 +123,24 @@ else:
     if doc_google:
         with st.spinner("Sincronizzazione dati in corso..."):
             try:
+                # 1. Caricamento tabella principale Spedizioni
                 foglio_spedizioni = doc_google.worksheet("Spedizioni")
-                
                 dati_foglio = foglio_spedizioni.get_all_values()
                 if len(dati_foglio) > 0:
                     df_totale = pd.DataFrame(dati_foglio[1:], columns=dati_foglio[0])
                 else:
                     df_totale = pd.DataFrame()
+                
+                # 2. CARICAMENTO TABELLA STORICO EVENTI
+                try:
+                    foglio_storico = doc_google.worksheet("Storico")
+                    dati_storico = foglio_storico.get_all_values()
+                    if len(dati_storico) > 0:
+                        df_storico = pd.DataFrame(dati_storico[1:], columns=dati_storico[0])
+                    else:
+                        df_storico = pd.DataFrame()
+                except Exception:
+                    df_storico = pd.DataFrame()
                 
                 if 'Fornitore' in df_totale.columns:
                     df_filtrato = df_totale[df_totale['Fornitore'] == st.session_state["fornitore_nome"]]
@@ -167,7 +178,7 @@ else:
                 df_filtrato = pd.DataFrame()
 
         # ==========================================
-        # VISTA A: DETTAGLIO DELLA SPEDIZIONE
+        # VISTA A: DETTAGLIO DELLA SPEDIZIONE (DRILL-DOWN)
         # ==========================================
         if st.session_state["id_pacco_selezionato"] is not None:
             pacco_target = df_filtrato[df_filtrato['ID_Pacco'].astype(str) == str(st.session_state["id_pacco_selezionato"])]
@@ -193,26 +204,64 @@ else:
                 st.divider()
                 st.subheader("🕒 Cronologia e Storico Stati")
                 
-                stato_attuale = pacco.get('Stato', '')
-                ora_car = pacco.get('Navigazione / Ora_Carico', pacco.get('Ora_Carico', 'N/D'))
-                ora_esi = pacco.get('Ora_Esito', 'N/D')
+                # --- ESTREMA NOVITÀ: COSTRUZIONE TIMELINE DINAMICA DA SCHEDA STORICO ---
+                movimenti_trovati = False
+                if not df_storico.empty and 'ID_Pacco' in df_storico.columns:
+                    # Filtriamo i movimenti di questo specifico pacco
+                    storico_pacco = df_storico[df_storico['ID_Pacco'].astype(str) == str(pacco.get('ID_Pacco', ''))]
+                    
+                    if not storico_pacco.empty:
+                        movimenti_trovati = True
+                        # Mostriamo i movimenti dal più recente (in alto) al più vecchio (in basso)
+                        storico_pacco = storico_pacco.iloc[::-1]
+                        
+                        for idx_st, mov in storico_pacco.iterrows():
+                            stato_mov = mov.get('Stato_Registrato', '')
+                            data_mov = mov.get('Data_Ora', 'N/D')
+                            
+                            if stato_mov == "In Magazzino":
+                                st.warning(f"🏢 **IN MAGAZZINO** — Elaborato nell'hub logistico il: `{data_mov}`")
+                            elif stato_mov == "In Carico":
+                                st.info(f"🚚 **IN CONSEGNA** — Spedizione caricata sul furgone il: `{data_mov}`")
+                            elif stato_mov == "Consegnato":
+                                st.success(f"✅ **CONSEGNATO** — Merce consegnata con successo il: `{data_mov}`")
+                            elif stato_mov == "Respinto":
+                                st.error(f"⚠️ **RESPINTO** — Spedizione rifiutata dal destinatario il: `{data_mov}`")
+                            elif stato_mov == "Assente":
+                                st.error(f"❌ **DESTINATARIO ASSENTE** — Tentata consegna a vuoto il: `{data_mov}`")
+                            elif stato_mov == "Eliminato":
+                                st.error(f"🗑️ **ELIMINATO** — Annullato dal magazzino il: `{data_mov}`")
+                            else:
+                                st.text(f"📦 **{stato_mov.upper()}** — Aggiornamento registrato il: `{data_mov}`")
+                            
+                            # Disegna una freccetta verticale per connettere visivamente i blocchi di stato
+                            st.markdown("<p style='margin: -10px 0px -5px 15px; color: gray; opacity: 0.4;'>▲</p>", unsafe_allow_html=True)
                 
-                if stato_attuale == "Eliminato":
-                    st.error("❌ **Eliminato** — La spedizione è stata annullata o rimossa dal magazzino.")
-                else:
-                    if stato_attuale == "Consegnato":
-                        st.success(f"✅ **CONSEGNATO** \n🕒 Ora: {ora_esi}")
-                        st.markdown("  ▲<br>  │", unsafe_allow_html=True)
-                    elif stato_attuale == "Respinto":
-                        st.error(f"⚠️ **RESPINTO DAL CLIENTE** \n🕒 Ora: {ora_esi}")
-                        st.markdown("  ▲<br>  │", unsafe_allow_html=True)
-                        
-                    if stato_attuale in ["In Carico", "Consegnato", "Respinto"]:
-                        st.info(f"🚚 **IN CONSEGNA** \n🕒 Ora: {ora_car}")
-                        st.markdown("  ▲<br>  │", unsafe_allow_html=True)
-                        
-                    if stato_attuale in ["In Magazzino", "In Carico", "Consegnato", "Respinto"]:
-                        st.warning("🏢 **IN MAGAZZINO** — Il pacco è arrivato ed è stato elaborato nell'hub logistico.")
+                # --- FALLBACK SE LO STORICO È VUOTO (PER I PACCHI VECCHI) ---
+                if not movimenti_trovati:
+                    stato_attuale = pacco.get('Stato', '')
+                    ora_car = pacco.get('Navigazione / Ora_Carico', pacco.get('Ora_Carico', 'N/D'))
+                    ora_esi = pacco.get('Ora_Esito', 'N/D')
+                    
+                    if stato_attuale == "Eliminato":
+                        st.error("❌ **Eliminato** — La spedizione è stata annullata o rimossa dal magazzino.")
+                    else:
+                        if stato_attuale == "Consegnato":
+                            st.success(f"✅ **CONSEGNATO** \n🕒 Ora: {ora_esi}")
+                            st.markdown("  ▲<br>  │", unsafe_allow_html=True)
+                        elif stato_attuale == "Respinto":
+                            st.error(f"⚠️ **RESPINTO DAL CLIENTE** \n🕒 Ora: {ora_esi}")
+                            st.markdown("  ▲<br>  │", unsafe_allow_html=True)
+                        elif stato_attuale == "Assente":
+                            st.error(f"❌ **DESTINATARIO ASSENTE** \n🕒 Ora: {ora_esi}")
+                            st.markdown("  ▲<br>  │", unsafe_allow_html=True)
+                            
+                        if stato_attuale in ["In Carico", "Consegnato", "Respinto", "Assente"]:
+                            st.info(f"🚚 **IN CONSEGNA** \n🕒 Ora: {ora_car}")
+                            st.markdown("  ▲<br>  │", unsafe_allow_html=True)
+                            
+                        if stato_attuale in ["In Magazzino", "In Carico", "Consegnato", "Respinto", "Assente"]:
+                            st.warning("🏢 **IN MAGAZZINO** — Il pacco è arrivato ed è stato elaborato nell'hub logistico.")
             else:
                 st.error("Errore: Spedizione non trovata o rimossa dal database.")
                 st.session_state["id_pacco_selezionato"] = None
@@ -222,7 +271,7 @@ else:
         # ==========================================
         else:
             if df_filtrato.empty:
-                st.info("Nessuna spedizione trovata per il periodo selezionato.")
+                st.info("Nessuna spedizione trouvata per il periodo selezionato.")
             else:
                 st.subheader("Stato Attuale delle Spedizioni")
                 totali = len(df_filtrato)
@@ -261,14 +310,12 @@ else:
                     righe_per_pagina = 10
                     totale_pagine = math.ceil(len(df_visualizza) / righe_per_pagina)
                     
-                    # Sicurezza: se la pagina corrente per qualche motivo supera il totale, riassestala
                     if st.session_state["pagina_corrente"] > totale_pagine:
                         st.session_state["pagina_corrente"] = 1
                         
                     inizio = (st.session_state["pagina_corrente"] - 1) * righe_per_pagina
                     fine = inizio + righe_per_pagina
                     
-                    # Estraiamo solo le 10 righe che ci servono per la pagina attuale
                     df_pagina = df_visualizza.iloc[inizio:fine]
                     
                     # --- INTESTAZIONE TABELLA ---
