@@ -103,10 +103,10 @@ else:
     # --- UI FILTRO TEMPORALE GLOBALE ---
     col_filtro, _ = st.columns([1.5, 3])
     with col_filtro:
-        # index=4 imposta automaticamente "Ultimo mese" come selezione iniziale di default
+        # index=4 imposta "Ultimo mese" come selezione iniziale di default
         filtro_tempo = st.selectbox(
             "📅 Visualizza spedizioni di:",
-            ["Tutto", "Ultimo Giorno", "Ultimi 5 giorni", "Ultimi 15 giorni", "Ultimo mese", "Ultimi 3 mesi", "Ultimi 6 mesi", "Quest'anno"],
+            ["Tutto", "Oggi", "Ultimi 5 giorni", "Ultimi 15 giorni", "Ultimo mese", "Ultimi 3 mesi", "Ultimi 6 mesi", "Quest'anno"],
             index=4
         )
 
@@ -137,11 +137,11 @@ else:
                             errors='coerce'
                         )
                         
-                        # .normalize() azzera l'orario a mezzanotte per non perdere i pacchi del giorno stesso
+                        # .normalize() azzera l'orario a mezzanotte
                         oggi = pd.Timestamp.today().normalize()
                         
-                        if filtro_tempo == "Ultimo Giorno":
-                            df_filtrato = df_filtrato[date_convertite >= (oggi - pd.Timedelta(days=1))]
+                        if filtro_tempo == "Oggi":
+                            df_filtrato = df_filtrato[date_convertite >= oggi]
                         elif filtro_tempo == "Ultimi 5 giorni":
                             df_filtrato = df_filtrato[date_convertite >= (oggi - pd.Timedelta(days=5))]
                         elif filtro_tempo == "Ultimi 15 giorni":
