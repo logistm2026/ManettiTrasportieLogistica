@@ -51,7 +51,6 @@ if "autenticato" not in st.session_state:
     st.session_state["autenticato"] = False
     st.session_state["fornitore_nome"] = ""
 
-# Utilizziamo l'ID_Pacco univoco per identificare la spedizione selezionata
 if "id_pacco_selezionato" not in st.session_state:
     st.session_state["id_pacco_selezionato"] = None
 
@@ -101,13 +100,22 @@ else:
 
     st.divider()
 
+    # --- UI FILTRO TEMPORALE GLOBALE ---
+    col_filtro, _ = st.columns([1, 3])
+    with col_filtro:
+        filtro_tempo = st.selectbox(
+            "📅 Visualizza spedizioni di:",
+            ["Tutto", "Ultimo mese", "Ultimi 3 mesi", "Ultimi 6 mesi", "Quest'anno"],
+            index=0
+        )
+
     # --- CARICAMENTO E FILTRAGGIO DATI ---
     if doc_google:
-        with st.spinner("Aggiornamento dati in corso..."):
+        with st.spinner("Sincronizzazione dati in corso..."):
             try:
                 foglio_spedizioni = doc_google.worksheet("Spedizioni")
                 
-                # TECNICA DI IMPORTAZIONE TESTO PURO: Salva le virgole dei pesi europei
+                # Importazione testo puro
                 dati_foglio = foglio_spedizioni.get_all_values()
                 if len(dati_foglio) > 0:
                     df_totale = pd.DataFrame(dati_foglio[1:], columns=dati_foglio[0])
@@ -117,6 +125,29 @@ else:
                 # Applica il filtro di sicurezza per il fornitore loggato
                 if 'Fornitore' in df_totale.columns:
                     df_filtrato = df_totale[df_totale['Fornitore'] == st.session_state["fornitore_nome"]]
+                    
+                    # --- TAGLIO DEL DATABASE TRAMITE COLONNA 'ORDINAMENTO' ---
+                    if 'Ordinamento' in df_filtrato.columns and filtro_tempo != "Tutto":
+                        
+                        # Estraiamo i primi 8 caratteri (YYYYMMDD) e li convertiamo in data vera e propria
+                        # errors='coerce' ignora gentilmente righe vuote o malformate
+                        date_convertite = pd.to_datetime(
+                            df_filtrato['Ordinamento'].astype(str).str[:8], 
+                            format='%Y%m%d', 
+                            errors='coerce'
+                        )
+                        
+                        oggi = pd.Timestamp.today()
+                        
+                        if filtro_tempo == "Ultimo mese":
+                            df_filtrato = df_filtrato[date_convertite >= (oggi - pd.Timedelta(days=30))]
+                        elif filtro_tempo == "Ultimi 3 mesi":
+                            df_filtrato = df_filtrato[date_convertite >= (oggi - pd.Timedelta(days=90))]
+                        elif filtro_tempo == "Ultimi 6 mesi":
+                            df_filtrato = df_filtrato[date_convertite >= (oggi - pd.Timedelta(days=180))]
+                        elif filtro_tempo == "Quest'anno":
+                            df_filtrato = df_filtrato[date_convertite.dt.year == oggi.year]
+                            
                     # Capovolge l'ordine (mostra le righe più nuove in alto)
                     df_filtrato = df_filtrato.iloc[::-1]
                 else:
@@ -131,20 +162,17 @@ else:
         # VISTA A: DETTAGLIO DELLA SPEDIZIONE (DRILL-DOWN)
         # ==========================================
         if st.session_state["id_pacco_selezionato"] is not None:
-            # Cerchiamo il pacco filtrando per la colonna ID_Pacco
             pacco_target = df_filtrato[df_filtrato['ID_Pacco'].astype(str) == str(st.session_state["id_pacco_selezionato"])]
             
             if not pacco_target.empty:
                 pacco = pacco_target.iloc[0]
                 
-                # Bottone per tornare alla Tabella principale
                 if st.button("⬅️ Torna alla lista delle spedizioni"):
                     st.session_state["id_pacco_selezionato"] = None
                     st.rerun()
                 
                 st.markdown(f"## Dettaglio Spedizione DDT: **{pacco.get('DDT', 'N/D')}**")
                 
-                # Scheda riassuntiva info pacco
                 col_info1, col_info2 = st.columns(2)
                 with col_info1:
                     st.markdown(f"👤 **Destinatario:** {pacco.get('Destinatario', 'N/D')}")
@@ -157,16 +185,13 @@ else:
                 st.divider()
                 st.subheader("🕒 Cronologia e Storico Stati")
                 
-                # --- RECUPERO DATI TEMPORALI (Timeline Snella) ---
                 stato_attuale = pacco.get('Stato', '')
                 ora_car = pacco.get('Navigazione / Ora_Carico', pacco.get('Ora_Carico', 'N/D'))
                 ora_esi = pacco.get('Ora_Esito', 'N/D')
                 
-                # --- COSTRUZIONE TIMELINE GRAFICA VELOCE ---
                 if stato_attuale == "Eliminato":
                     st.error("❌ **Eliminato** — La spedizione è stata annullata o rimossa dal magazzino.")
                 else:
-                    # Passo 3: Esito finale su strada
                     if stato_attuale == "Consegnato":
                         st.success(f"✅ **CONSEGNATO** \n🕒 Ora: {ora_esi}")
                         st.markdown("  ▲<br>  │", unsafe_allow_html=True)
@@ -174,12 +199,10 @@ else:
                         st.error(f"⚠️ **RESPINTO DAL CLIENTE** \n🕒 Ora: {ora_esi}")
                         st.markdown("  ▲<br>  │", unsafe_allow_html=True)
                         
-                    # Passo 2: Presa in carico furgone
                     if stato_attuale in ["In Carico", "Consegnato", "Respinto"]:
                         st.info(f"🚚 **IN CONSEGNA** \n🕒 Ora: {ora_car}")
                         st.markdown("  ▲<br>  │", unsafe_allow_html=True)
                         
-                    # Passo 1: Stoccaggio iniziale hub
                     if stato_attuale in ["In Magazzino", "In Carico", "Consegnato", "Respinto"]:
                         st.warning("🏢 **IN MAGAZZINO** — Il pacco è arrivato ed è stato elaborato nell'hub logistico.")
             else:
@@ -191,9 +214,8 @@ else:
         # ==========================================
         else:
             if df_filtrato.empty:
-                st.info("Nessuna spedizione trovata per il tuo account.")
+                st.info("Nessuna spedizione trovata per il periodo selezionato.")
             else:
-                # Piccolo Dashboard contatori veloci
                 st.subheader("Stato Attuale delle Spedizioni")
                 totali = len(df_filtrato)
                 consegnati = len(df_filtrato[df_filtrato['Stato'] == 'Consegnato'])
@@ -208,7 +230,6 @@ else:
                 
                 st.divider()
                 
-                # Barra di ricerca dinamica
                 st.subheader("Elenco Spedizioni")
                 cerca_ddt = st.text_input("Filtra la tabella inserendo il numero di DDT o il nome del Destinatario:")
                 
@@ -225,33 +246,24 @@ else:
                 if df_visualizza.empty:
                     st.warning("Nessuna spedizione corrisponde ai criteri di ricerca.")
                 else:
-                    # --- DISEGNO DELLA GRIGLIA TABELLARE CUSTOM ---
-                    
-                    # Intestazioni delle colonne
                     col_h1, col_h2, col_h3, col_h4 = st.columns([2, 3, 2, 1.5])
                     col_h1.markdown("**Numero DDT**")
                     col_h2.markdown("**Ragione Sociale / Destinatario**")
                     col_h3.markdown("**Stato Spedizione**")
                     col_h4.markdown("**Azioni**")
                     
-                    # Linea marcata sotto l'intestazione
                     st.markdown("<hr style='margin: 4px 0px 12px 0px; border-bottom: 2px solid #4F4F4F;'>", unsafe_allow_html=True)
                     
-                    # Generazione ciclica delle righe di dati
                     for index, pacco in df_visualizza.iterrows():
                         c1, c2, c3, c4 = st.columns([2, 3, 2, 1.5])
                         
-                        # Mostra i testi allineandoli verticalmente al pulsante
                         c1.markdown(f"<p style='margin-top:8px;'>{pacco.get('DDT', 'N/D')}</p>", unsafe_allow_html=True)
                         c2.markdown(f"<p style='margin-top:8px;'>{pacco.get('Destinatario', 'N/D')}</p>", unsafe_allow_html=True)
                         c3.markdown(f"<p style='margin-top:8px;'>`{pacco.get('Stato', '')}`</p>", unsafe_allow_html=True)
                         
-                        # Il pulsante di azione salva nello stato della sessione l'ID_Pacco univoco
                         with c4:
-                            # Manteniamo l'index nel nome della key solo per renderla unica a livello Streamlit
                             if st.button("Apri ➔", key=f"btn_apri_{index}", use_container_width=True):
                                 st.session_state["id_pacco_selezionato"] = pacco.get('ID_Pacco')
                                 st.rerun()
                         
-                        # Linea grigia chiarissima per dividere visivamente i record
                         st.markdown("<hr style='margin: 6px 0px; opacity: 0.15;'>", unsafe_allow_html=True)
