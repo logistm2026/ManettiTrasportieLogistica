@@ -2,6 +2,7 @@ import streamlit as st
 import pandas as pd
 import json
 import gspread
+import math
 from oauth2client.service_account import ServiceAccountCredentials
 
 # --- CONFIGURAZIONE PAGINA ---
@@ -46,6 +47,10 @@ def verifica_login(username, password, doc_google):
         st.error(f"Errore durante la verifica delle credenziali: {e}")
         return None
 
+# --- FUNZIONE PER RESETTARE LA PAGINA SE CAMBIA IL FILTRO ---
+def resetta_pagina():
+    st.session_state["pagina_corrente"] = 1
+
 # --- INIZIALIZZAZIONE STATO DELLA SESSIONE ---
 if "autenticato" not in st.session_state:
     st.session_state["autenticato"] = False
@@ -53,6 +58,9 @@ if "autenticato" not in st.session_state:
 
 if "id_pacco_selezionato" not in st.session_state:
     st.session_state["id_pacco_selezionato"] = None
+
+if "pagina_corrente" not in st.session_state:
+    st.session_state["pagina_corrente"] = 1
 
 doc_google = connetti_google_sheets()
 
@@ -96,6 +104,7 @@ else:
             st.session_state["autenticato"] = False
             st.session_state["fornitore_nome"] = ""
             st.session_state["id_pacco_selezionato"] = None
+            st.session_state["pagina_corrente"] = 1
             st.rerun()
 
     st.divider()
@@ -103,11 +112,11 @@ else:
     # --- UI FILTRO TEMPORALE GLOBALE ---
     col_filtro, _ = st.columns([1.5, 3])
     with col_filtro:
-        # index=4 imposta "Ultimo mese" come selezione iniziale di default
         filtro_tempo = st.selectbox(
             "📅 Visualizza spedizioni di:",
             ["Tutto", "Oggi", "Ultimi 5 giorni", "Ultimi 15 giorni", "Ultimo mese", "Ultimi 3 mesi", "Ultimi 6 mesi", "Quest'anno"],
-            index=4
+            index=4,
+            on_change=resetta_pagina  # Se cambiano il periodo, torna a pagina 1
         )
 
     # --- CARICAMENTO E FILTRAGGIO DATI ---
@@ -116,28 +125,21 @@ else:
             try:
                 foglio_spedizioni = doc_google.worksheet("Spedizioni")
                 
-                # Importazione testo puro
                 dati_foglio = foglio_spedizioni.get_all_values()
                 if len(dati_foglio) > 0:
                     df_totale = pd.DataFrame(dati_foglio[1:], columns=dati_foglio[0])
                 else:
                     df_totale = pd.DataFrame()
                 
-                # Applica il filtro di sicurezza per il fornitore loggato
                 if 'Fornitore' in df_totale.columns:
                     df_filtrato = df_totale[df_totale['Fornitore'] == st.session_state["fornitore_nome"]]
                     
-                    # --- TAGLIO DEL DATABASE TRAMITE COLONNA 'ORDINAMENTO' ---
                     if 'Ordinamento' in df_filtrato.columns and filtro_tempo != "Tutto":
-                        
-                        # Estraiamo i primi 8 caratteri (YYYYMMDD) e li convertiamo in data reale
                         date_convertite = pd.to_datetime(
                             df_filtrato['Ordinamento'].astype(str).str[:8], 
                             format='%Y%m%d', 
                             errors='coerce'
                         )
-                        
-                        # .normalize() azzera l'orario a mezzanotte
                         oggi = pd.Timestamp.today().normalize()
                         
                         if filtro_tempo == "Oggi":
@@ -155,7 +157,6 @@ else:
                         elif filtro_tempo == "Quest'anno":
                             df_filtrato = df_filtrato[date_convertite.dt.year == oggi.year]
                             
-                    # Capovolge l'ordine (mostra le righe più nuove in alto)
                     df_filtrato = df_filtrato.iloc[::-1]
                 else:
                     df_filtrato = pd.DataFrame()
@@ -166,7 +167,7 @@ else:
                 df_filtrato = pd.DataFrame()
 
         # ==========================================
-        # VISTA A: DETTAGLIO DELLA SPEDIZIONE (DRILL-DOWN)
+        # VISTA A: DETTAGLIO DELLA SPEDIZIONE
         # ==========================================
         if st.session_state["id_pacco_selezionato"] is not None:
             pacco_target = df_filtrato[df_filtrato['ID_Pacco'].astype(str) == str(st.session_state["id_pacco_selezionato"])]
@@ -217,7 +218,7 @@ else:
                 st.session_state["id_pacco_selezionato"] = None
 
         # ==========================================
-        # VISTA B: TABELLA GENERALE PERSONALIZZATA
+        # VISTA B: TABELLA GENERALE CON IMPAGINAZIONE
         # ==========================================
         else:
             if df_filtrato.empty:
@@ -238,7 +239,10 @@ else:
                 st.divider()
                 
                 st.subheader("Elenco Spedizioni")
-                cerca_ddt = st.text_input("Filtra la tabella inserendo il numero di DDT o il nome del Destinatario:")
+                cerca_ddt = st.text_input(
+                    "Filtra la tabella inserendo il numero di DDT o il nome del Destinatario:",
+                    on_change=resetta_pagina # Se cercano qualcosa, torna a pagina 1
+                )
                 
                 if cerca_ddt:
                     df_visualizza = df_filtrato[
@@ -253,6 +257,21 @@ else:
                 if df_visualizza.empty:
                     st.warning("Nessuna spedizione corrisponde ai criteri di ricerca.")
                 else:
+                    # --- LOGICA DI IMPAGINAZIONE ---
+                    righe_per_pagina = 10
+                    totale_pagine = math.ceil(len(df_visualizza) / righe_per_pagina)
+                    
+                    # Sicurezza: se la pagina corrente per qualche motivo supera il totale, riassestala
+                    if st.session_state["pagina_corrente"] > totale_pagine:
+                        st.session_state["pagina_corrente"] = 1
+                        
+                    inizio = (st.session_state["pagina_corrente"] - 1) * righe_per_pagina
+                    fine = inizio + righe_per_pagina
+                    
+                    # Estraiamo solo le 10 righe che ci servono per la pagina attuale
+                    df_pagina = df_visualizza.iloc[inizio:fine]
+                    
+                    # --- INTESTAZIONE TABELLA ---
                     col_h1, col_h2, col_h3, col_h4 = st.columns([2, 3, 2, 1.5])
                     col_h1.markdown("**Numero DDT**")
                     col_h2.markdown("**Ragione Sociale / Destinatario**")
@@ -261,7 +280,8 @@ else:
                     
                     st.markdown("<hr style='margin: 4px 0px 12px 0px; border-bottom: 2px solid #4F4F4F;'>", unsafe_allow_html=True)
                     
-                    for index, pacco in df_visualizza.iterrows():
+                    # --- DISEGNO DELLE RIGHE (SOLO LA PAGINA CORRENTE) ---
+                    for index, pacco in df_pagina.iterrows():
                         c1, c2, c3, c4 = st.columns([2, 3, 2, 1.5])
                         
                         c1.markdown(f"<p style='margin-top:8px;'>{pacco.get('DDT', 'N/D')}</p>", unsafe_allow_html=True)
@@ -274,3 +294,20 @@ else:
                                 st.rerun()
                         
                         st.markdown("<hr style='margin: 6px 0px; opacity: 0.15;'>", unsafe_allow_html=True)
+                    
+                    # --- CONTROLLI DI NAVIGAZIONE PAGINA ---
+                    st.markdown("<br>", unsafe_allow_html=True)
+                    col_prev, col_page, col_next = st.columns([1, 2, 1])
+                    
+                    with col_prev:
+                        if st.button("⬅️ Precedente", use_container_width=True, disabled=(st.session_state["pagina_corrente"] == 1)):
+                            st.session_state["pagina_corrente"] -= 1
+                            st.rerun()
+                            
+                    with col_page:
+                        st.markdown(f"<p style='text-align: center; margin-top: 8px;'>Pagina <b>{st.session_state['pagina_corrente']}</b> di <b>{totale_pagine}</b></p>", unsafe_allow_html=True)
+                        
+                    with col_next:
+                        if st.button("Successiva ➡️", use_container_width=True, disabled=(st.session_state["pagina_corrente"] == totale_pagine)):
+                            st.session_state["pagina_corrente"] += 1
+                            st.rerun()
