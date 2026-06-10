@@ -228,6 +228,7 @@ else:
                                         padding: 15px; 
                                         border-radius: 8px; 
                                         color: #ffffff;
+                                        margin-bottom: 25px;
                                     ">
                                         🏢 <b>IN MAGAZZINO</b> — Elaborato nell'hub logistico
                                     </div>
