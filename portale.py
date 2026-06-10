@@ -224,7 +224,7 @@ else:
                             if "in magazzino" in stato_mov_test:
                                 st.markdown("""
                                     <div style="
-                                        background-color: #5a137d; 
+                                        background-color: #8a42a6; 
                                         padding: 15px; 
                                         border-radius: 8px; 
                                         color: #ffffff;
