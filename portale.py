@@ -216,25 +216,26 @@ else:
                         storico_pacco = storico_pacco.iloc[::-1]
                         
                         for idx_st, mov in storico_pacco.iterrows():
-                            # Estrae lo stato e toglie eventuali spazi invisibili all'inizio o alla fine
-                            stato_mov = str(mov.get('Stato Registrato', mov.get('Stato_Registrato', ''))).strip()
+                            # Estrae lo stato, toglie gli spazi e lo converte tutto in minuscolo per non avere errori di battitura
+                            stato_mov_puro = str(mov.get('Stato Registrato', mov.get('Stato_Registrato', ''))).strip()
+                            stato_mov_test = stato_mov_puro.lower()
                             data_mov = mov.get('Data Ora', mov.get('Data_Ora', 'N/D'))
                             
-                            if stato_mov == "In Magazzino":
+                            if "in magazzino" in stato_mov_test:
                                 st.warning(f"🏢 **IN MAGAZZINO** — Elaborato nell'hub logistico il: `{data_mov}`")
-                            elif stato_mov == "In Carico":
+                            elif "in carico" in stato_mov_test:
                                 st.info(f"🚚 **IN CONSEGNA** — Spedizione caricata sul furgone il: `{data_mov}`")
-                            elif stato_mov == "Consegnato":
+                            elif "consegnato" in stato_mov_test:
                                 st.success(f"✅ **CONSEGNATO** — Merce consegnata con successo il: `{data_mov}`")
-                            elif stato_mov == "Respinto":
+                            elif "respinto" in stato_mov_test:
                                 st.error(f"⚠️ **RESPINTO** — Spedizione rifiutata dal destinatario il: `{data_mov}`")
-                            elif stato_mov == "Assente":
-                                # Cambiato in st.warning per avere il riquadro giallo!
+                            elif "assente" in stato_mov_test:
+                                # Eccolo qui! Anche se da AppSheet arriva "ASSENTE" o "assente", lo cattura.
                                 st.warning(f"🟡 **DESTINATARIO ASSENTE** — Tentata consegna a vuoto il: `{data_mov}`")
-                            elif stato_mov == "Eliminato":
+                            elif "eliminato" in stato_mov_test:
                                 st.error(f"🗑️ **ELIMINATO** — Annullato dal magazzino il: `{data_mov}`")
                             else:
-                                st.text(f"📦 **{stato_mov.upper()}** — Aggiornamento registrato il: `{data_mov}`")
+                                st.text(f"📦 **{stato_mov_puro.upper()}** — Aggiornamento registrato il: `{data_mov}`")
                             
                             # Disegna una freccetta verticale per connettere visivamente i blocchi di stato
                             st.markdown("<p style='margin: -10px 0px -5px 15px; color: gray; opacity: 0.4;'>▲</p>", unsafe_allow_html=True)
