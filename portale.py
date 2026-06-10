@@ -222,7 +222,11 @@ else:
                             data_mov = mov.get('Data Ora', mov.get('Data_Ora', 'N/D'))
                             
                             if "in magazzino" in stato_mov_test:
-                                st.warning(f"🏢 **IN MAGAZZINO** — Elaborato nell'hub logistico")
+                                st.markdown("""
+                                    <div style="background-color: #f8f0ff; padding: 15px; border-radius: 5px; border-left: 5px solid #800080; color: #4b0082;">
+                                        🏢 <b>IN MAGAZZINO</b> — Elaborato nell'hub logistico</code>
+                                    </div>
+                                """, unsafe_allow_html=True)
                             elif "in carico" in stato_mov_test:
                                 st.info(f"🚚 **IN CONSEGNA** — Spedizione caricata sul furgone il: `{data_mov}`")
                             elif "consegnato" in stato_mov_test:
