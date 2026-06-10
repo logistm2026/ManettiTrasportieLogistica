@@ -216,7 +216,8 @@ else:
                         storico_pacco = storico_pacco.iloc[::-1]
                         
                         for idx_st, mov in storico_pacco.iterrows():
-                            stato_mov = mov.get('Stato Registrato', mov.get('Stato_Registrato', ''))
+                            # Estrae lo stato e toglie eventuali spazi invisibili all'inizio o alla fine
+                            stato_mov = str(mov.get('Stato Registrato', mov.get('Stato_Registrato', ''))).strip()
                             data_mov = mov.get('Data Ora', mov.get('Data_Ora', 'N/D'))
                             
                             if stato_mov == "In Magazzino":
@@ -228,7 +229,8 @@ else:
                             elif stato_mov == "Respinto":
                                 st.error(f"⚠️ **RESPINTO** — Spedizione rifiutata dal destinatario il: `{data_mov}`")
                             elif stato_mov == "Assente":
-                                st.error(f"❌ **DESTINATARIO ASSENTE** — Tentata consegna a vuoto il: `{data_mov}`")
+                                # Cambiato in st.warning per avere il riquadro giallo!
+                                st.warning(f"🟡 **DESTINATARIO ASSENTE** — Tentata consegna a vuoto il: `{data_mov}`")
                             elif stato_mov == "Eliminato":
                                 st.error(f"🗑️ **ELIMINATO** — Annullato dal magazzino il: `{data_mov}`")
                             else:
