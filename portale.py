@@ -222,7 +222,7 @@ else:
                             data_mov = mov.get('Data Ora', mov.get('Data_Ora', 'N/D'))
                             
                             if "in magazzino" in stato_mov_test:
-                                st.warning(f"🏢 **IN MAGAZZINO** — Elaborato nell'hub logistico il: `{data_mov}`")
+                                st.warning(f"🏢 **IN MAGAZZINO** — Elaborato nell'hub logistico")
                             elif "in carico" in stato_mov_test:
                                 st.info(f"🚚 **IN CONSEGNA** — Spedizione caricata sul furgone il: `{data_mov}`")
                             elif "consegnato" in stato_mov_test:
