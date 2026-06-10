@@ -223,10 +223,17 @@ else:
                             
                             if "in magazzino" in stato_mov_test:
                                 st.markdown("""
-                                    <div style="background-color: #f8f0ff; padding: 15px; border-radius: 5px; border-left: 5px solid #800080; color: #4b0082;">
+                                    <div style="
+                                        background-color: #ede7f6; 
+                                        padding: 15px; 
+                                        border-radius: 8px; 
+                                        border-left: 10px solid #5e35b1; 
+                                        box-shadow: 2px 2px 5px rgba(0,0,0,0.1);
+                                        color: #311b92;
+                                    ">
                                         🏢 <b>IN MAGAZZINO</b> — Elaborato nell'hub logistico</code>
                                     </div>
-                                """, unsafe_allow_html=True)
+                                """.format(data_mov), unsafe_allow_html=True)
                             elif "in carico" in stato_mov_test:
                                 st.info(f"🚚 **IN CONSEGNA** — Spedizione caricata sul furgone il: `{data_mov}`")
                             elif "consegnato" in stato_mov_test:
