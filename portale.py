@@ -7,7 +7,7 @@ from oauth2client.service_account import ServiceAccountCredentials
 # --- CONFIGURAZIONE PAGINA ---
 st.set_page_config(page_title="Portale Fornitori - Tracking", page_icon="🌐", layout="wide")
 
-# --- NASCONDI INTERFACCIA STREAMLIT (Linguetta superiore, footer, pulsanti di dev) ---
+# --- NASCONDI INTERFACCIA STREAMLIT ---
 nascondi_menu = """
     <style>
     [data-testid="stToolbar"] {visibility: hidden !important;}
@@ -51,8 +51,9 @@ if "autenticato" not in st.session_state:
     st.session_state["autenticato"] = False
     st.session_state["fornitore_nome"] = ""
 
-if "ddt_selezionato" not in st.session_state:
-    st.session_state["ddt_selezionato"] = None
+# Utilizziamo l'ID_Pacco univoco per identificare la spedizione selezionata
+if "id_pacco_selezionato" not in st.session_state:
+    st.session_state["id_pacco_selezionato"] = None
 
 doc_google = connetti_google_sheets()
 
@@ -95,7 +96,7 @@ else:
         if st.button("🚪 Esci", use_container_width=True):
             st.session_state["autenticato"] = False
             st.session_state["fornitore_nome"] = ""
-            st.session_state["ddt_selezionato"] = None
+            st.session_state["id_pacco_selezionato"] = None
             st.rerun()
 
     st.divider()
@@ -129,18 +130,19 @@ else:
         # ==========================================
         # VISTA A: DETTAGLIO DELLA SPEDIZIONE (DRILL-DOWN)
         # ==========================================
-        if st.session_state["ddt_selezionato"] is not None:
-            pacco = df_filtrato[df_filtrato['DDT'].astype(str) == str(st.session_state["ddt_selezionato"])]
+        if st.session_state["id_pacco_selezionato"] is not None:
+            # Cerchiamo il pacco filtrando per la colonna ID_Pacco
+            pacco_target = df_filtrato[df_filtrato['ID_Pacco'].astype(str) == str(st.session_state["id_pacco_selezionato"])]
             
-            if not pacco.empty:
-                pacco = pacco.iloc[0]
+            if not pacco_target.empty:
+                pacco = pacco_target.iloc[0]
                 
                 # Bottone per tornare alla Tabella principale
                 if st.button("⬅️ Torna alla lista delle spedizioni"):
-                    st.session_state["ddt_selezionato"] = None
+                    st.session_state["id_pacco_selezionato"] = None
                     st.rerun()
                 
-                st.markdown(f"## Dettaglio Spedizione DDT: **{pacco['DDT']}**")
+                st.markdown(f"## Dettaglio Spedizione DDT: **{pacco.get('DDT', 'N/D')}**")
                 
                 # Scheda riassuntiva info pacco
                 col_info1, col_info2 = st.columns(2)
@@ -164,7 +166,7 @@ else:
                 if stato_attuale == "Eliminato":
                     st.error("❌ **Eliminato** — La spedizione è stata annullata o rimossa dal magazzino.")
                 else:
-                    # Passo 3: Esito finale su strada (Richiede Ora)
+                    # Passo 3: Esito finale su strada
                     if stato_attuale == "Consegnato":
                         st.success(f"✅ **CONSEGNATO** \n🕒 Ora: {ora_esi}")
                         st.markdown("  ▲<br>  │", unsafe_allow_html=True)
@@ -172,24 +174,24 @@ else:
                         st.error(f"⚠️ **RESPINTO DAL CLIENTE** \n🕒 Ora: {ora_esi}")
                         st.markdown("  ▲<br>  │", unsafe_allow_html=True)
                         
-                    # Passo 2: Presa in carico furgone (Richiede Ora)
+                    # Passo 2: Presa in carico furgone
                     if stato_attuale in ["In Carico", "Consegnato", "Respinto"]:
                         st.info(f"🚚 **IN CONSEGNA** \n🕒 Ora: {ora_car}")
                         st.markdown("  ▲<br>  │", unsafe_allow_html=True)
                         
-                    # Passo 1: Stoccaggio iniziale hub (Solo testuale)
+                    # Passo 1: Stoccaggio iniziale hub
                     if stato_attuale in ["In Magazzino", "In Carico", "Consegnato", "Respinto"]:
                         st.warning("🏢 **IN MAGAZZINO** — Il pacco è arrivato ed è stato elaborato nell'hub logistico.")
             else:
-                st.error("Errore: Spedizione non trovata.")
-                st.session_state["ddt_selezionato"] = None
+                st.error("Errore: Spedizione non trovata o rimossa dal database.")
+                st.session_state["id_pacco_selezionato"] = None
 
         # ==========================================
         # VISTA B: TABELLA GENERALE PERSONALIZZATA
         # ==========================================
         else:
             if df_filtrato.empty:
-                st.info("Nessuna spedizione trouvata per il tuo account.")
+                st.info("Nessuna spedizione trovata per il tuo account.")
             else:
                 # Piccolo Dashboard contatori veloci
                 st.subheader("Stato Attuale delle Spedizioni")
@@ -244,11 +246,12 @@ else:
                         c2.markdown(f"<p style='margin-top:8px;'>{pacco.get('Destinatario', 'N/D')}</p>", unsafe_allow_html=True)
                         c3.markdown(f"<p style='margin-top:8px;'>`{pacco.get('Stato', '')}`</p>", unsafe_allow_html=True)
                         
-                        # Il pulsante di azione che apre la vista di dettaglio
+                        # Il pulsante di azione salva nello stato della sessione l'ID_Pacco univoco
                         with c4:
-                            if st.button("Apri ➔", key=f"btn_{pacco.get('DDT', index)}", use_container_width=True):
-                                st.session_state["ddt_selezionato"] = pacco['DDT']
+                            # Manteniamo l'index nel nome della key solo per renderla unica a livello Streamlit
+                            if st.button("Apri ➔", key=f"btn_apri_{index}", use_container_width=True):
+                                st.session_state["id_pacco_selezionato"] = pacco.get('ID_Pacco')
                                 st.rerun()
                         
-                        # Linea grigia chiarissima per dividerive visivamente i record
+                        # Linea grigia chiarissima per dividere visivamente i record
                         st.markdown("<hr style='margin: 6px 0px; opacity: 0.15;'>", unsafe_allow_html=True)
