@@ -228,7 +228,7 @@ else:
                 totali = len(df_filtrato)
                 consegnati = len(df_filtrato[df_filtrato['Stato'] == 'Consegnato'])
                 in_viaggio = len(df_filtrato[df_filtrato['Stato'] == 'In Carico'])
-                anomalie = len(df_filtrato['Stato'].isin(['Respinto', 'Eliminato', 'Assente'])])
+                anomalie = len(df_filtrato['Stato'].isin(['Respinto', 'Eliminato', 'Assente']))
                 
                 c1, c2, c3, c4 = st.columns(4)
                 c1.metric("Spedizioni Totali", totali)
