@@ -292,7 +292,7 @@ else:
                 in_viaggio = len(df_filtrato[df_filtrato['Stato'] == 'In Carico'])
                 
                 
-                c1, c2, c3 = st.columns(4)
+                c1, c2, c3 = st.columns(3)
                 c1.metric("Spedizioni Totali", totali)
                 c2.metric("✅ Consegnate", consegnati)
                 c3.metric("🚚 In Consegna", in_viaggio)
