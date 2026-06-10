@@ -227,7 +227,7 @@ else:
                                         background-color: rgba(138, 66, 166, 0.2); 
                                         padding: 15px; 
                                         border-radius: 8px; 
-                                        color: #ffffff;
+                                        color: #8a42a6;
                                         margin-bottom: 15px;
                                     ">
                                         🏢 <b>IN MAGAZZINO</b> — Elaborato nell'hub logistico
