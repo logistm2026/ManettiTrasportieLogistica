@@ -216,8 +216,8 @@ else:
                         storico_pacco = storico_pacco.iloc[::-1]
                         
                         for idx_st, mov in storico_pacco.iterrows():
-                            stato_mov = mov.get('Stato_Registrato', '')
-                            data_mov = mov.get('Data_Ora', 'N/D')
+                            stato_mov = mov.get('Stato Registrato', mov.get('Stato_Registrato', ''))
+                            data_mov = mov.get('Data Ora', mov.get('Data_Ora', 'N/D'))
                             
                             if stato_mov == "In Magazzino":
                                 st.warning(f"🏢 **IN MAGAZZINO** — Elaborato nell'hub logistico il: `{data_mov}`")
