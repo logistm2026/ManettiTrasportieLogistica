@@ -224,10 +224,9 @@ else:
                             if "in magazzino" in stato_mov_test:
                                 st.markdown("""
                                     <div style="
-                                        background-color: #311b92; 
+                                        background-color: #5a137d; 
                                         padding: 15px; 
                                         border-radius: 8px; 
-                                        border-left: 10px solid #7e57c2; 
                                         color: #ffffff;
                                     ">
                                         🏢 <b>IN MAGAZZINO</b> — Elaborato nell'hub logistico
