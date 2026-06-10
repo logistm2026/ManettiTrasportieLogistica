@@ -101,12 +101,13 @@ else:
     st.divider()
 
     # --- UI FILTRO TEMPORALE GLOBALE ---
-    col_filtro, _ = st.columns([1, 3])
+    col_filtro, _ = st.columns([1.5, 3])
     with col_filtro:
+        # index=4 imposta automaticamente "Ultimo mese" come selezione iniziale di default
         filtro_tempo = st.selectbox(
             "📅 Visualizza spedizioni di:",
-            ["Tutto", "Ultimo mese", "Ultimi 3 mesi", "Ultimi 6 mesi", "Quest'anno"],
-            index=0
+            ["Tutto", "Ultimo Giorno", "Ultimi 5 giorni", "Ultimi 15 giorni", "Ultimo mese", "Ultimi 3 mesi", "Ultimi 6 mesi", "Quest'anno"],
+            index=4
         )
 
     # --- CARICAMENTO E FILTRAGGIO DATI ---
@@ -129,17 +130,23 @@ else:
                     # --- TAGLIO DEL DATABASE TRAMITE COLONNA 'ORDINAMENTO' ---
                     if 'Ordinamento' in df_filtrato.columns and filtro_tempo != "Tutto":
                         
-                        # Estraiamo i primi 8 caratteri (YYYYMMDD) e li convertiamo in data vera e propria
-                        # errors='coerce' ignora gentilmente righe vuote o malformate
+                        # Estraiamo i primi 8 caratteri (YYYYMMDD) e li convertiamo in data reale
                         date_convertite = pd.to_datetime(
                             df_filtrato['Ordinamento'].astype(str).str[:8], 
                             format='%Y%m%d', 
                             errors='coerce'
                         )
                         
-                        oggi = pd.Timestamp.today()
+                        # .normalize() azzera l'orario a mezzanotte per non perdere i pacchi del giorno stesso
+                        oggi = pd.Timestamp.today().normalize()
                         
-                        if filtro_tempo == "Ultimo mese":
+                        if filtro_tempo == "Ultimo Giorno":
+                            df_filtrato = df_filtrato[date_convertite >= (oggi - pd.Timedelta(days=1))]
+                        elif filtro_tempo == "Ultimi 5 giorni":
+                            df_filtrato = df_filtrato[date_convertite >= (oggi - pd.Timedelta(days=5))]
+                        elif filtro_tempo == "Ultimi 15 giorni":
+                            df_filtrato = df_filtrato[date_convertite >= (oggi - pd.Timedelta(days=15))]
+                        elif filtro_tempo == "Ultimo mese":
                             df_filtrato = df_filtrato[date_convertite >= (oggi - pd.Timedelta(days=30))]
                         elif filtro_tempo == "Ultimi 3 mesi":
                             df_filtrato = df_filtrato[date_convertite >= (oggi - pd.Timedelta(days=90))]
