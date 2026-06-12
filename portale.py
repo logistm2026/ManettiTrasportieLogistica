@@ -128,6 +128,10 @@ else:
                 dati_foglio = foglio_spedizioni.get_all_values()
                 if len(dati_foglio) > 0:
                     df_totale = pd.DataFrame(dati_foglio[1:], columns=dati_foglio[0])
+                    
+                    # --- TRADUZIONE STATO DA "IN CARICO" A "IN CONSEGNA" ---
+                    if 'Stato' in df_totale.columns:
+                        df_totale['Stato'] = df_totale['Stato'].replace('In Carico', 'In Consegna')
                 else:
                     df_totale = pd.DataFrame()
                 
@@ -204,19 +208,16 @@ else:
                 st.divider()
                 st.subheader("🕒 Cronologia e Storico Stati")
                 
-                # --- ESTREMA NOVITÀ: COSTRUZIONE TIMELINE DINAMICA DA SCHEDA STORICO ---
+                # --- TIMELINE DINAMICA DA SCHEDA STORICO ---
                 movimenti_trovati = False
                 if not df_storico.empty and 'ID_Pacco' in df_storico.columns:
-                    # Filtriamo i movimenti di questo specifico pacco
                     storico_pacco = df_storico[df_storico['ID_Pacco'].astype(str) == str(pacco.get('ID_Pacco', ''))]
                     
                     if not storico_pacco.empty:
                         movimenti_trovati = True
-                        # Mostriamo i movimenti dal più recente (in alto) al più vecchio (in basso)
                         storico_pacco = storico_pacco.iloc[::-1]
                         
                         for idx_st, mov in storico_pacco.iterrows():
-                            # Estrae lo stato, toglie gli spazi e lo converte tutto in minuscolo per non avere errori di battitura
                             stato_mov_puro = str(mov.get('Stato Registrato', mov.get('Stato_Registrato', ''))).strip()
                             stato_mov_test = stato_mov_puro.lower()
                             data_mov = mov.get('Data Ora', mov.get('Data_Ora', 'N/D'))
@@ -233,24 +234,22 @@ else:
                                         🏢 <b>IN MAGAZZINO</b> — Elaborato nell'hub logistico
                                     </div>
                                 """.format(data_mov), unsafe_allow_html=True)
-                            elif "in carico" in stato_mov_test:
+                            elif "in carico" in stato_mov_test or "in consegna" in stato_mov_test:
                                 st.info(f"🚚 **IN CONSEGNA** — Spedizione caricata sul furgone il: `{data_mov}`")
                             elif "consegnato" in stato_mov_test:
                                 st.success(f"✅ **CONSEGNATO** — Merce consegnata con successo il: `{data_mov}`")
                             elif "respinto" in stato_mov_test:
                                 st.error(f"⚠️ **RESPINTO** — Spedizione rifiutata dal destinatario il: `{data_mov}`")
                             elif "assente" in stato_mov_test:
-                                # Eccolo qui! Anche se da AppSheet arriva "ASSENTE" o "assente", lo cattura.
                                 st.warning(f"🟡 **DESTINATARIO ASSENTE** — Tentata consegna a vuoto il: `{data_mov}`")
                             elif "eliminato" in stato_mov_test:
                                 st.error(f"🗑️ **ELIMINATO** — Annullato dal magazzino il: `{data_mov}`")
                             else:
                                 st.text(f"📦 **{stato_mov_puro.upper()}** — Aggiornamento registrato il: `{data_mov}`")
                             
-                            # Disegna una freccetta verticale per connettere visivamente i blocchi di stato
                             st.markdown("<p style='margin: -10px 0px -5px 15px; color: gray; opacity: 0.4;'>▲</p>", unsafe_allow_html=True)
                 
-                # --- FALLBACK SE LO STORICO È VUOTO (PER I PACCHI VECCHI) ---
+                # --- FALLBACK SE LO STORICO È VUOTO ---
                 if not movimenti_trovati:
                     stato_attuale = pacco.get('Stato', '')
                     ora_car = pacco.get('Navigazione / Ora_Carico', pacco.get('Ora_Carico', 'N/D'))
@@ -269,11 +268,13 @@ else:
                             st.error(f"❌ **DESTINATARIO ASSENTE** \n🕒 Ora: {ora_esi}")
                             st.markdown("  ▲<br>  │", unsafe_allow_html=True)
                             
-                        if stato_attuale in ["In Carico", "Consegnato", "Respinto", "Assente"]:
+                        # Modificato qui per intercettare il nuovo stato
+                        if stato_attuale in ["In Consegna", "Consegnato", "Respinto", "Assente"]:
                             st.info(f"🚚 **IN CONSEGNA** \n🕒 Ora: {ora_car}")
                             st.markdown("  ▲<br>  │", unsafe_allow_html=True)
                             
-                        if stato_attuale in ["In Magazzino", "In Carico", "Consegnato", "Respinto", "Assente"]:
+                        # Modificato qui per intercettare il nuovo stato
+                        if stato_attuale in ["In Magazzino", "In Consegna", "Consegnato", "Respinto", "Assente"]:
                             st.warning("🏢 **IN MAGAZZINO** — Il pacco è arrivato ed è stato elaborato nell'hub logistico.")
             else:
                 st.error("Errore: Spedizione non trovata o rimossa dal database.")
@@ -284,26 +285,26 @@ else:
         # ==========================================
         else:
             if df_filtrato.empty:
-                st.info("Nessuna spedizione trouvata per il periodo selezionato.")
+                st.info("Nessuna spedizione trovata per il periodo selezionato.")
             else:
                 st.subheader("Stato Attuale delle Spedizioni")
                 totali = len(df_filtrato)
                 consegnati = len(df_filtrato[df_filtrato['Stato'] == 'Consegnato'])
-                in_viaggio = len(df_filtrato[df_filtrato['Stato'] == 'In Carico'])
                 
+                # Modificato qui per intercettare il nuovo stato
+                in_viaggio = len(df_filtrato[df_filtrato['Stato'] == 'In Consegna'])
                 
                 c1, c2, c3 = st.columns(3)
                 c1.metric("Spedizioni Totali", totali)
                 c2.metric("✅ Consegnate", consegnati)
                 c3.metric("🚚 In Consegna", in_viaggio)
                 
-                
                 st.divider()
                 
                 st.subheader("Elenco Spedizioni")
                 cerca_ddt = st.text_input(
                     "Filtra la tabella inserendo il numero di DDT o il nome del Destinatario:",
-                    on_change=resetta_pagina # Se cercano qualcosa, torna a pagina 1
+                    on_change=resetta_pagina 
                 )
                 
                 if cerca_ddt:
@@ -340,7 +341,7 @@ else:
                     
                     st.markdown("<hr style='margin: 4px 0px 12px 0px; border-bottom: 2px solid #4F4F4F;'>", unsafe_allow_html=True)
                     
-                    # --- DISEGNO DELLE RIGHE (SOLO LA PAGINA CORRENTE) ---
+                    # --- DISEGNO DELLE RIGHE ---
                     for index, pacco in df_pagina.iterrows():
                         c1, c2, c3, c4 = st.columns([2, 3, 2, 1.5])
                         
