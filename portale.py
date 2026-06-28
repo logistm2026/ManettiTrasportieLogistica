@@ -20,14 +20,14 @@ nascondi_menu = """
     """
 st.markdown(nascondi_menu, unsafe_allow_html=True)
 
-# --- CONNESSIONE A GOOGLE SHEETS ---
-def connetti_google_sheets():
+# --- CONNESSIONE A GOOGLE SHEETS (Restituisce il Client intero) ---
+def connetti_google_client():
     try:
         scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
         creds_dict = json.loads(st.secrets["google_key"])
         creds = ServiceAccountCredentials.from_json_keyfile_dict(creds_dict, scope)
         client = gspread.authorize(creds)
-        return client.open("Logistica Tracking")
+        return client
     except Exception as e:
         st.error(f"Errore di connessione al database: {e}")
         return None
@@ -62,7 +62,21 @@ if "id_pacco_selezionato" not in st.session_state:
 if "pagina_corrente" not in st.session_state:
     st.session_state["pagina_corrente"] = 1
 
-doc_google = connetti_google_sheets()
+# --- ISTANZA CONNESSIONI AI FILE ---
+client_gspread = connetti_google_client()
+doc_google = None
+doc_archivio = None
+
+if client_gspread:
+    try:
+        doc_google = client_gspread.open("Logistica Tracking")
+    except:
+        st.error("Errore: Impossibile aprire il file 'Logistica Tracking'.")
+    
+    try:
+        doc_archivio = client_gspread.open("Archivio_Logistica")
+    except:
+        pass # Silenzioso: se l'archivio non c'è, il sistema userà solo il principale
 
 # ==========================================
 # 1. SCHERMATA DI LOGIN
@@ -94,7 +108,6 @@ if not st.session_state["autenticato"]:
 # 2. AREA RISERVATA (UTENTE AUTENTICATO)
 # ==========================================
 else:
-    # Barra superiore con Titolo e Bottone Esci
     col_titolo, col_logout = st.columns([4, 1])
     with col_titolo:
         st.title(f"📦 Portale Spedizioni: {st.session_state['fornitore_nome']}")
@@ -116,37 +129,56 @@ else:
             "📅 Visualizza spedizioni di:",
             ["Tutto", "Oggi", "Ultimi 5 giorni", "Ultimi 15 giorni", "Ultimo mese", "Ultimi 3 mesi", "Ultimi 6 mesi", "Quest'anno"],
             index=4,
-            on_change=resetta_pagina  # Se cambiano il periodo, torna a pagina 1
+            on_change=resetta_pagina 
         )
 
     # --- CARICAMENTO E FILTRAGGIO DATI ---
     if doc_google:
         with st.spinner("Sincronizzazione dati in corso..."):
             try:
-                # 1. Caricamento tabella principale Spedizioni
-                foglio_spedizioni = doc_google.worksheet("Spedizioni")
-                dati_foglio = foglio_spedizioni.get_all_values()
-                if len(dati_foglio) > 0:
-                    df_totale = pd.DataFrame(dati_foglio[1:], columns=dati_foglio[0])
-                    
-                    # --- TRADUZIONE STATO DA "IN CARICO" A "IN CONSEGNA" ---
-                    if 'Stato' in df_totale.columns:
-                        df_totale['Stato'] = df_totale['Stato'].replace('In Carico', 'In Consegna')
+                # 1. CARICAMENTO SPEDIZIONI (FUSIONE CALDO + FREDDO)
+                dati_principale = doc_google.worksheet("Spedizioni").get_all_values()
+                df_principale = pd.DataFrame(dati_principale[1:], columns=dati_principale[0]) if len(dati_principale) > 1 else pd.DataFrame()
+                
+                df_archivio_sped = pd.DataFrame()
+                if doc_archivio:
+                    try:
+                        dati_arch_sped = doc_archivio.worksheet("Spedizioni").get_all_values()
+                        if len(dati_arch_sped) > 1:
+                            df_archivio_sped = pd.DataFrame(dati_arch_sped[1:], columns=dati_arch_sped[0])
+                    except:
+                        pass
+                
+                # Unione infallibile: se uno dei due è vuoto, usa l'altro
+                df_totale = pd.concat([df_principale, df_archivio_sped], ignore_index=True).fillna("")
+                
+                if 'Stato' in df_totale.columns:
+                    df_totale['Stato'] = df_totale['Stato'].replace('In Carico', 'In Consegna')
                 else:
                     df_totale = pd.DataFrame()
                 
-                # 2. CARICAMENTO TABELLA STORICO EVENTI
+                # 2. CARICAMENTO STORICO EVENTI (FUSIONE CALDO + FREDDO)
+                df_st_principale = pd.DataFrame()
                 try:
-                    foglio_storico = doc_google.worksheet("Storico")
-                    dati_storico = foglio_storico.get_all_values()
-                    if len(dati_storico) > 0:
-                        df_storico = pd.DataFrame(dati_storico[1:], columns=dati_storico[0])
-                    else:
-                        df_storico = pd.DataFrame()
-                except Exception:
-                    df_storico = pd.DataFrame()
+                    dati_st_princ = doc_google.worksheet("Storico").get_all_values()
+                    if len(dati_st_princ) > 1:
+                        df_st_principale = pd.DataFrame(dati_st_princ[1:], columns=dati_st_princ[0])
+                except:
+                    pass
                 
-                if 'Fornitore' in df_totale.columns:
+                df_st_archivio = pd.DataFrame()
+                if doc_archivio:
+                    try:
+                        dati_st_arch = doc_archivio.worksheet("Storico").get_all_values()
+                        if len(dati_st_arch) > 1:
+                            df_st_archivio = pd.DataFrame(dati_st_arch[1:], columns=dati_st_arch[0])
+                    except:
+                        pass
+                
+                df_storico = pd.concat([df_st_principale, df_st_archivio], ignore_index=True).fillna("")
+
+                # 3. APPLICAZIONE DEI FILTRI DI RICERCA E TEMPO
+                if not df_totale.empty and 'Fornitore' in df_totale.columns:
                     df_filtrato = df_totale[df_totale['Fornitore'] == st.session_state["fornitore_nome"]]
                     
                     if 'Ordinamento' in df_filtrato.columns and filtro_tempo != "Tutto":
@@ -175,7 +207,7 @@ else:
                     df_filtrato = df_filtrato.iloc[::-1]
                 else:
                     df_filtrato = pd.DataFrame()
-                    st.error("Errore del database: Colonna 'Fornitore' non trovata.")
+                    st.error("Nessun dato valido disponibile o Fornitore non configurato.")
                 
             except Exception as e:
                 st.error(f"Errore nel caricamento delle spedizioni: {e}")
@@ -208,7 +240,7 @@ else:
                 st.divider()
                 st.subheader("🕒 Cronologia e Storico Stati")
                 
-                # --- TIMELINE DINAMICA DA SCHEDA STORICO ---
+                # --- TIMELINE DINAMICA ---
                 movimenti_trovati = False
                 if not df_storico.empty and 'ID_Pacco' in df_storico.columns:
                     storico_pacco = df_storico[df_storico['ID_Pacco'].astype(str) == str(pacco.get('ID_Pacco', ''))]
@@ -231,7 +263,7 @@ else:
                                         color: #b159d4;
                                         margin-bottom: 15px;
                                     ">
-                                        🏢 <b>IN MAGAZZINO</b> — Elaborato nell'hub logistico
+                                        🏢 <b>IN MAGAZZINO</b> — Elaborato nell'hub logistico il: `{0}`
                                     </div>
                                 """.format(data_mov), unsafe_allow_html=True)
                             elif "in carico" in stato_mov_test or "in consegna" in stato_mov_test:
@@ -268,12 +300,10 @@ else:
                             st.error(f"❌ **DESTINATARIO ASSENTE** \n🕒 Ora: {ora_esi}")
                             st.markdown("  ▲<br>  │", unsafe_allow_html=True)
                             
-                        # Modificato qui per intercettare il nuovo stato
                         if stato_attuale in ["In Consegna", "Consegnato", "Respinto", "Assente"]:
                             st.info(f"🚚 **IN CONSEGNA** \n🕒 Ora: {ora_car}")
                             st.markdown("  ▲<br>  │", unsafe_allow_html=True)
                             
-                        # Modificato qui per intercettare il nuovo stato
                         if stato_attuale in ["In Magazzino", "In Consegna", "Consegnato", "Respinto", "Assente"]:
                             st.warning("🏢 **IN MAGAZZINO** — Il pacco è arrivato ed è stato elaborato nell'hub logistico.")
             else:
@@ -290,8 +320,6 @@ else:
                 st.subheader("Stato Attuale delle Spedizioni")
                 totali = len(df_filtrato)
                 consegnati = len(df_filtrato[df_filtrato['Stato'] == 'Consegnato'])
-                
-                # Modificato qui per intercettare il nuovo stato
                 in_viaggio = len(df_filtrato[df_filtrato['Stato'] == 'In Consegna'])
                 
                 c1, c2, c3 = st.columns(3)
