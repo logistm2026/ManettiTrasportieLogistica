@@ -5,10 +5,10 @@ import gspread
 import math
 from oauth2client.service_account import ServiceAccountCredentials
 
-# --- CONFIGURAZIONE PAGINA ---
+# CONFIGURAZIONE PAGINA
 st.set_page_config(page_title="Portale Fornitori - Tracking", page_icon="🌐", layout="wide")
 
-# --- NASCONDI INTERFACCIA STREAMLIT ---
+# NASCONDI INTERFACCIA STREAMLIT
 nascondi_menu = """
     <style>
     [data-testid="stToolbar"] {visibility: hidden !important;}
@@ -20,7 +20,7 @@ nascondi_menu = """
     """
 st.markdown(nascondi_menu, unsafe_allow_html=True)
 
-# --- CONNESSIONE A GOOGLE SHEETS (Restituisce il Client intero) ---
+# CONNESSIONE A GOOGLE SHEETS
 def connetti_google_client():
     try:
         scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
@@ -32,7 +32,7 @@ def connetti_google_client():
         st.error(f"Errore di connessione al database: {e}")
         return None
 
-# --- VERIFICA CREDENZIALI LOGIN ---
+# VERIFICA CREDENZIALI LOGIN
 def verifica_login(username, password, doc_google):
     try:
         foglio_fornitori = doc_google.worksheet("Fornitori")
@@ -47,11 +47,11 @@ def verifica_login(username, password, doc_google):
         st.error(f"Errore durante la verifica delle credenziali: {e}")
         return None
 
-# --- FUNZIONE PER RESETTARE LA PAGINA SE CAMBIA IL FILTRO ---
+# FUNZIONE PER RESETTARE LA PAGINA SE CAMBIA IL FILTRO
 def resetta_pagina():
     st.session_state["pagina_corrente"] = 1
 
-# --- INIZIALIZZAZIONE STATO DELLA SESSIONE ---
+# INIZIALIZZAZIONE STATO DELLA SESSIONE
 if "autenticato" not in st.session_state:
     st.session_state["autenticato"] = False
     st.session_state["fornitore_nome"] = ""
@@ -62,7 +62,7 @@ if "id_pacco_selezionato" not in st.session_state:
 if "pagina_corrente" not in st.session_state:
     st.session_state["pagina_corrente"] = 1
 
-# --- ISTANZA CONNESSIONI AI FILE ---
+# ISTANZA CONNESSIONI AI FILE
 client_gspread = connetti_google_client()
 doc_google = None
 doc_archivio = None
@@ -82,7 +82,7 @@ if client_gspread:
 # 1. SCHERMATA DI LOGIN
 # ==========================================
 if not st.session_state["autenticato"]:
-    st.markdown("<h1 style='text-align: center;'>🔒 Accesso Portale Tracking</h1>", unsafe_allow_html=True)
+    st.markdown("<h1 style='text-align: center;'>🔒 Accesso Portale Tracking Manetti</h1>", unsafe_allow_html=True)
     st.markdown("<p style='text-align: center; color: gray;'>Inserisci le tue credenziali per verificare lo stato delle spedizioni.</p>", unsafe_allow_html=True)
     
     with st.form("form_login", clear_on_submit=False):
@@ -122,7 +122,7 @@ else:
 
     st.divider()
 
-    # --- UI FILTRO TEMPORALE GLOBALE ---
+    # UI FILTRO TEMPORALE GLOBALE
     col_filtro, _ = st.columns([1.5, 3])
     with col_filtro:
         filtro_tempo = st.selectbox(
@@ -132,11 +132,11 @@ else:
             on_change=resetta_pagina 
         )
 
-    # --- CARICAMENTO E FILTRAGGIO DATI ---
+    # CARICAMENTO E FILTRAGGIO DATI
     if doc_google:
         with st.spinner("Sincronizzazione dati in corso..."):
             try:
-                # 1. CARICAMENTO SPEDIZIONI (FUSIONE CALDO + FREDDO)
+                # 1. CARICAMENTO SPEDIZIONI
                 dati_principale = doc_google.worksheet("Spedizioni").get_all_values()
                 df_principale = pd.DataFrame(dati_principale[1:], columns=dati_principale[0]) if len(dati_principale) > 1 else pd.DataFrame()
                 
@@ -149,7 +149,7 @@ else:
                     except:
                         pass
                 
-                # Unione infallibile: se uno dei due è vuoto, usa l'altro
+                # Se uno dei due è vuoto, usa l'altro
                 df_totale = pd.concat([df_principale, df_archivio_sped], ignore_index=True).fillna("")
                 
                 if 'Stato' in df_totale.columns:
@@ -157,7 +157,7 @@ else:
                 else:
                     df_totale = pd.DataFrame()
                 
-                # 2. CARICAMENTO STORICO EVENTI (FUSIONE CALDO + FREDDO)
+                # 2. CARICAMENTO STORICO EVENTI
                 df_st_principale = pd.DataFrame()
                 try:
                     dati_st_princ = doc_google.worksheet("Storico").get_all_values()
@@ -240,7 +240,7 @@ else:
                 st.divider()
                 st.subheader("🕒 Cronologia e Storico Stati")
                 
-                # --- TIMELINE DINAMICA ---
+                # TIMELINE DINAMICA
                 movimenti_trovati = False
                 if not df_storico.empty and 'ID_Pacco' in df_storico.columns:
                     storico_pacco = df_storico[df_storico['ID_Pacco'].astype(str) == str(pacco.get('ID_Pacco', ''))]
@@ -281,7 +281,7 @@ else:
                             
                             st.markdown("<p style='margin: -10px 0px -5px 15px; color: gray; opacity: 0.4;'>▲</p>", unsafe_allow_html=True)
                 
-                # --- FALLBACK SE LO STORICO È VUOTO ---
+                # FALLBACK SE LO STORICO È VUOTO
                 if not movimenti_trovati:
                     stato_attuale = pacco.get('Stato', '')
                     ora_car = pacco.get('Navigazione / Ora_Carico', pacco.get('Ora_Carico', 'N/D'))
@@ -348,7 +348,7 @@ else:
                 if df_visualizza.empty:
                     st.warning("Nessuna spedizione corrisponde ai criteri di ricerca.")
                 else:
-                    # --- LOGICA DI IMPAGINAZIONE ---
+                    # LOGICA DI IMPAGINAZIONE
                     righe_per_pagina = 10
                     totale_pagine = math.ceil(len(df_visualizza) / righe_per_pagina)
                     
@@ -360,7 +360,7 @@ else:
                     
                     df_pagina = df_visualizza.iloc[inizio:fine]
                     
-                    # --- INTESTAZIONE TABELLA ---
+                    # INTESTAZIONE TABELLA
                     col_h1, col_h2, col_h3, col_h4 = st.columns([2, 3, 2, 1.5])
                     col_h1.markdown("**Numero DDT**")
                     col_h2.markdown("**Ragione Sociale / Destinatario**")
@@ -369,7 +369,7 @@ else:
                     
                     st.markdown("<hr style='margin: 4px 0px 12px 0px; border-bottom: 2px solid #4F4F4F;'>", unsafe_allow_html=True)
                     
-                    # --- DISEGNO DELLE RIGHE ---
+                    # DISEGNO DELLE RIGHE
                     for index, pacco in df_pagina.iterrows():
                         c1, c2, c3, c4 = st.columns([2, 3, 2, 1.5])
                         
@@ -384,7 +384,7 @@ else:
                         
                         st.markdown("<hr style='margin: 6px 0px; opacity: 0.15;'>", unsafe_allow_html=True)
                     
-                    # --- CONTROLLI DI NAVIGAZIONE PAGINA ---
+                    # CONTROLLI DI NAVIGAZIONE PAGINA
                     st.markdown("<br>", unsafe_allow_html=True)
                     col_prev, col_page, col_next = st.columns([1, 2, 1])
                     
