@@ -32,12 +32,59 @@ def connetti_google_client():
         st.error(f"Errore di connessione al database: {e}")
         return None
 
+# ==========================================
+# FUNZIONI DI CARICAMENTO DATI CON CACHE
+# ==========================================
+# Nota ingegneristica: usiamo il prefisso "_" negli argomenti per impedire a Streamlit 
+# di calcolare l'hash dei documenti Google, operazione che andrebbe in errore.
+
+@st.cache_data(ttl=600)  # Le credenziali dei fornitori cambiano raramente, teniamole in cache 10 minuti
+def cached_get_fornitori(_doc_google):
+    foglio_fornitori = _doc_google.worksheet("Fornitori")
+    return pd.DataFrame(foglio_fornitori.get_all_records())
+
+@st.cache_data(ttl=300)  # Le spedizioni si aggiornano in cache ogni 5 minuti automaticamente
+def cached_get_spedizioni(_doc_google, _doc_archivio):
+    dati_principale = _doc_google.worksheet("Spedizioni").get_all_values()
+    df_principale = pd.DataFrame(dati_principale[1:], columns=dati_principale[0]) if len(dati_principale) > 1 else pd.DataFrame()
+    
+    df_archivio_sped = pd.DataFrame()
+    if _doc_archivio:
+        try:
+            dati_arch_sped = _doc_archivio.worksheet("Spedizioni").get_all_values()
+            if len(dati_arch_sped) > 1:
+                df_archivio_sped = pd.DataFrame(dati_arch_sped[1:], columns=dati_arch_sped[0])
+        except:
+            pass
+    return pd.concat([df_principale, df_archivio_sped], ignore_index=True).fillna("")
+
+@st.cache_data(ttl=300)  # Lo storico si aggiorna in cache ogni 5 minuti
+def cached_get_storico(_doc_google, _doc_archivio):
+    df_st_principale = pd.DataFrame()
+    try:
+        dati_st_princ = _doc_google.worksheet("Storico").get_all_values()
+        if len(dati_st_princ) > 1:
+            df_st_principale = pd.DataFrame(dati_st_princ[1:], columns=dati_st_princ[0])
+    except:
+        pass
+        
+    df_st_archivio = pd.DataFrame()
+    if _doc_archivio:
+        try:
+            dati_st_arch = _doc_archivio.worksheet("Storico").get_all_values()
+            if len(dati_st_arch) > 1:
+                df_st_archivio = pd.DataFrame(dati_st_arch[1:], columns=dati_st_arch[0])
+        except:
+            pass
+            
+    return pd.concat([df_st_principale, df_st_archivio], ignore_index=True).fillna("")
+
+
 # VERIFICA CREDENZIALI LOGIN
 def verifica_login(username, password, doc_google):
     try:
-        foglio_fornitori = doc_google.worksheet("Fornitori")
-        dati_fornitori = pd.DataFrame(foglio_fornitori.get_all_records())
-        
+        # Usiamo la funzione con cache
+        dati_fornitori = cached_get_fornitori(doc_google)
         utente = dati_fornitori[(dati_fornitori['Username'] == username) & (dati_fornitori['Password'] == str(password))]
         
         if not utente.empty:
@@ -76,7 +123,7 @@ if client_gspread:
     try:
         doc_archivio = client_gspread.open("Archivio_Logistica")
     except:
-        pass # Silenzioso: se l'archivio non c'è, il sistema userà solo il principale
+        pass 
 
 # ==========================================
 # 1. SCHERMATA DI LOGIN
@@ -136,46 +183,14 @@ else:
     if doc_google:
         with st.spinner("Sincronizzazione dati in corso..."):
             try:
-                # 1. CARICAMENTO SPEDIZIONI
-                dati_principale = doc_google.worksheet("Spedizioni").get_all_values()
-                df_principale = pd.DataFrame(dati_principale[1:], columns=dati_principale[0]) if len(dati_principale) > 1 else pd.DataFrame()
-                
-                df_archivio_sped = pd.DataFrame()
-                if doc_archivio:
-                    try:
-                        dati_arch_sped = doc_archivio.worksheet("Spedizioni").get_all_values()
-                        if len(dati_arch_sped) > 1:
-                            df_archivio_sped = pd.DataFrame(dati_arch_sped[1:], columns=dati_arch_sped[0])
-                    except:
-                        pass
-                
-                # Se uno dei due è vuoto, usa l'altro
-                df_totale = pd.concat([df_principale, df_archivio_sped], ignore_index=True).fillna("")
+                # CHIAMATE AI METODI CON CACHE (Invece dei vecchi scaricamenti diretti)
+                df_totale = cached_get_spedizioni(doc_google, doc_archivio)
+                df_storico = cached_get_storico(doc_google, doc_archivio)
                 
                 if 'Stato' in df_totale.columns:
                     df_totale['Stato'] = df_totale['Stato'].replace('In Carico', 'In Consegna')
                 else:
                     df_totale = pd.DataFrame()
-                
-                # 2. CARICAMENTO STORICO EVENTI
-                df_st_principale = pd.DataFrame()
-                try:
-                    dati_st_princ = doc_google.worksheet("Storico").get_all_values()
-                    if len(dati_st_princ) > 1:
-                        df_st_principale = pd.DataFrame(dati_st_princ[1:], columns=dati_st_princ[0])
-                except:
-                    pass
-                
-                df_st_archivio = pd.DataFrame()
-                if doc_archivio:
-                    try:
-                        dati_st_arch = doc_archivio.worksheet("Storico").get_all_values()
-                        if len(dati_st_arch) > 1:
-                            df_st_archivio = pd.DataFrame(dati_st_arch[1:], columns=dati_st_arch[0])
-                    except:
-                        pass
-                
-                df_storico = pd.concat([df_st_principale, df_st_archivio], ignore_index=True).fillna("")
 
                 # 3. APPLICAZIONE DEI FILTRI DI RICERCA E TEMPO
                 if not df_totale.empty and 'Fornitore' in df_totale.columns:
@@ -208,7 +223,7 @@ else:
                 else:
                     df_filtrato = pd.DataFrame()
                     st.error("Nessun dato valido disponibile o Fornitore non configurato.")
-                
+                    
             except Exception as e:
                 st.error(f"Errore nel caricamento delle spedizioni: {e}")
                 df_filtrato = pd.DataFrame()
@@ -240,7 +255,6 @@ else:
                 st.divider()
                 st.subheader("🕒 Cronologia e Storico Stati")
                 
-                # TIMELINE DINAMICA
                 movimenti_trovati = False
                 if not df_storico.empty and 'ID_Pacco' in df_storico.columns:
                     storico_pacco = df_storico[df_storico['ID_Pacco'].astype(str) == str(pacco.get('ID_Pacco', ''))]
@@ -263,9 +277,9 @@ else:
                                         color: #b159d4;
                                         margin-bottom: 15px;
                                     ">
-                                        🏢 <b>IN MAGAZZINO</b> — Elaborato nell'hub logistico
+                                        🏢 <b>IN MAGAZZINO</b> — Elaborato nell'hub logistico il: `{0}`
                                     </div>
-                                """, unsafe_allow_html=True)
+                                """.format(data_mov), unsafe_allow_html=True)
                             elif "in carico" in stato_mov_test or "in consegna" in stato_mov_test:
                                 st.info(f"🚚 **IN CONSEGNA** — Spedizione caricata sul furgone il: `{data_mov}`")
                             elif "consegnato" in stato_mov_test:
@@ -281,7 +295,6 @@ else:
                             
                             st.markdown("<p style='margin: -10px 0px -5px 15px; color: gray; opacity: 0.4;'>▲</p>", unsafe_allow_html=True)
                 
-                # FALLBACK SE LO STORICO È VUOTO
                 if not movimenti_trovati:
                     stato_attuale = pacco.get('Stato', '')
                     ora_car = pacco.get('Navigazione / Ora_Carico', pacco.get('Ora_Carico', 'N/D'))
@@ -348,7 +361,6 @@ else:
                 if df_visualizza.empty:
                     st.warning("Nessuna spedizione corrisponde ai criteri di ricerca.")
                 else:
-                    # LOGICA DI IMPAGINAZIONE
                     righe_per_pagina = 10
                     totale_pagine = math.ceil(len(df_visualizza) / righe_per_pagina)
                     
@@ -360,7 +372,6 @@ else:
                     
                     df_pagina = df_visualizza.iloc[inizio:fine]
                     
-                    # INTESTAZIONE TABELLA
                     col_h1, col_h2, col_h3, col_h4 = st.columns([2, 3, 2, 1.5])
                     col_h1.markdown("**Numero DDT**")
                     col_h2.markdown("**Ragione Sociale / Destinatario**")
@@ -369,7 +380,6 @@ else:
                     
                     st.markdown("<hr style='margin: 4px 0px 12px 0px; border-bottom: 2px solid #4F4F4F;'>", unsafe_allow_html=True)
                     
-                    # DISEGNO DELLE RIGHE
                     for index, pacco in df_pagina.iterrows():
                         c1, c2, c3, c4 = st.columns([2, 3, 2, 1.5])
                         
@@ -384,7 +394,6 @@ else:
                         
                         st.markdown("<hr style='margin: 6px 0px; opacity: 0.15;'>", unsafe_allow_html=True)
                     
-                    # CONTROLLI DI NAVIGAZIONE PAGINA
                     st.markdown("<br>", unsafe_allow_html=True)
                     col_prev, col_page, col_next = st.columns([1, 2, 1])
                     
