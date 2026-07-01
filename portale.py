@@ -20,30 +20,37 @@ nascondi_menu = """
     """
 st.markdown(nascondi_menu, unsafe_allow_html=True)
 
-# CONNESSIONE A GOOGLE SHEETS
-def connetti_google_client():
+# ==========================================
+# 1. CONNESSIONE AI FILE (CON CACHE DI RETE)
+# ==========================================
+@st.cache_resource
+def inizializza_connessioni_google():
     try:
         scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
         creds_dict = json.loads(st.secrets["google_key"])
         creds = ServiceAccountCredentials.from_json_keyfile_dict(creds_dict, scope)
         client = gspread.authorize(creds)
-        return client
+        
+        doc_princ = client.open("Logistica Tracking")
+        try:
+            doc_arch = client.open("Archivio_Logistica")
+        except:
+            doc_arch = None
+            
+        return doc_princ, doc_arch
     except Exception as e:
-        st.error(f"Errore di connessione al database: {e}")
-        return None
+        st.error(f"Errore critico di inizializzazione: {e}")
+        return None, None
 
 # ==========================================
-# FUNZIONI DI CARICAMENTO DATI CON CACHE
+# 2. CARICAMENTO DATI (CON CACHE DI MEMORIA)
 # ==========================================
-# Nota ingegneristica: usiamo il prefisso "_" negli argomenti per impedire a Streamlit 
-# di calcolare l'hash dei documenti Google, operazione che andrebbe in errore.
-
-@st.cache_data(ttl=600)  # Le credenziali dei fornitori cambiano raramente, teniamole in cache 10 minuti
+@st.cache_data(ttl=600)
 def cached_get_fornitori(_doc_google):
     foglio_fornitori = _doc_google.worksheet("Fornitori")
     return pd.DataFrame(foglio_fornitori.get_all_records())
 
-@st.cache_data(ttl=300)  # Le spedizioni si aggiornano in cache ogni 5 minuti automaticamente
+@st.cache_data(ttl=300)
 def cached_get_spedizioni(_doc_google, _doc_archivio):
     dati_principale = _doc_google.worksheet("Spedizioni").get_all_values()
     df_principale = pd.DataFrame(dati_principale[1:], columns=dati_principale[0]) if len(dati_principale) > 1 else pd.DataFrame()
@@ -58,7 +65,7 @@ def cached_get_spedizioni(_doc_google, _doc_archivio):
             pass
     return pd.concat([df_principale, df_archivio_sped], ignore_index=True).fillna("")
 
-@st.cache_data(ttl=300)  # Lo storico si aggiorna in cache ogni 5 minuti
+@st.cache_data(ttl=300)
 def cached_get_storico(_doc_google, _doc_archivio):
     df_st_principale = pd.DataFrame()
     try:
@@ -79,11 +86,9 @@ def cached_get_storico(_doc_google, _doc_archivio):
             
     return pd.concat([df_st_principale, df_st_archivio], ignore_index=True).fillna("")
 
-
 # VERIFICA CREDENZIALI LOGIN
 def verifica_login(username, password, doc_google):
     try:
-        # Usiamo la funzione con cache
         dati_fornitori = cached_get_fornitori(doc_google)
         utente = dati_fornitori[(dati_fornitori['Username'] == username) & (dati_fornitori['Password'] == str(password))]
         
@@ -109,24 +114,14 @@ if "id_pacco_selezionato" not in st.session_state:
 if "pagina_corrente" not in st.session_state:
     st.session_state["pagina_corrente"] = 1
 
-# ISTANZA CONNESSIONI AI FILE
-client_gspread = connetti_google_client()
-doc_google = None
-doc_archivio = None
-
-if client_gspread:
-    try:
-        doc_google = client_gspread.open("Logistica Tracking")
-    except:
-        st.error("Errore: Impossibile aprire il file 'Logistica Tracking'.")
-    
-    try:
-        doc_archivio = client_gspread.open("Archivio_Logistica")
-    except:
-        pass 
+# ==========================================
+# ESECUZIONE CONNESSIONE INIZIALE CON SPINNER VISIVO
+# ==========================================
+with st.spinner("Connessione ai server in corso, attendere..."):
+    doc_google, doc_archivio = inizializza_connessioni_google()
 
 # ==========================================
-# 1. SCHERMATA DI LOGIN
+# 3. SCHERMATA DI LOGIN
 # ==========================================
 if not st.session_state["autenticato"]:
     st.markdown("<h1 style='text-align: center;'>🔒 Accesso Portale Tracking Manetti</h1>", unsafe_allow_html=True)
@@ -152,7 +147,7 @@ if not st.session_state["autenticato"]:
                     st.error("❌ Username o Password errati. Riprova.")
 
 # ==========================================
-# 2. AREA RISERVATA (UTENTE AUTENTICATO)
+# 4. AREA RISERVATA (UTENTE AUTENTICATO)
 # ==========================================
 else:
     col_titolo, col_logout = st.columns([4, 1])
@@ -183,7 +178,6 @@ else:
     if doc_google:
         with st.spinner("Sincronizzazione dati in corso..."):
             try:
-                # CHIAMATE AI METODI CON CACHE (Invece dei vecchi scaricamenti diretti)
                 df_totale = cached_get_spedizioni(doc_google, doc_archivio)
                 df_storico = cached_get_storico(doc_google, doc_archivio)
                 
@@ -192,7 +186,7 @@ else:
                 else:
                     df_totale = pd.DataFrame()
 
-                # 3. APPLICAZIONE DEI FILTRI DI RICERCA E TEMPO
+                # APPLICAZIONE DEI FILTRI DI RICERCA E TEMPO
                 if not df_totale.empty and 'Fornitore' in df_totale.columns:
                     df_filtrato = df_totale[df_totale['Fornitore'] == st.session_state["fornitore_nome"]]
                     
@@ -268,6 +262,7 @@ else:
                             stato_mov_test = stato_mov_puro.lower()
                             data_mov = mov.get('Data Ora', mov.get('Data_Ora', 'N/D'))
                             
+                            # IL BLOCCO "IN MAGAZZINO" È RIMASTO INTONSO COME DA TUA RICHIESTA
                             if "in magazzino" in stato_mov_test:
                                 st.markdown("""
                                     <div style="
@@ -295,6 +290,7 @@ else:
                             
                             st.markdown("<p style='margin: -10px 0px -5px 15px; color: gray; opacity: 0.4;'>▲</p>", unsafe_allow_html=True)
                 
+                # FALLBACK SE LO STORICO E' VUOTO
                 if not movimenti_trovati:
                     stato_attuale = pacco.get('Stato', '')
                     ora_car = pacco.get('Navigazione / Ora_Carico', pacco.get('Ora_Carico', 'N/D'))
