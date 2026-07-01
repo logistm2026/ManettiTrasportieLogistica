@@ -263,9 +263,9 @@ else:
                                         color: #b159d4;
                                         margin-bottom: 15px;
                                     ">
-                                        🏢 <b>IN MAGAZZINO</b> — Elaborato nell'hub logistico il: `{0}`
+                                        🏢 <b>IN MAGAZZINO</b> — Elaborato nell'hub logistico
                                     </div>
-                                """.format(data_mov), unsafe_allow_html=True)
+                                """, unsafe_allow_html=True)
                             elif "in carico" in stato_mov_test or "in consegna" in stato_mov_test:
                                 st.info(f"🚚 **IN CONSEGNA** — Spedizione caricata sul furgone il: `{data_mov}`")
                             elif "consegnato" in stato_mov_test:
