@@ -276,7 +276,7 @@ else:
                                     </div>
                                 """, unsafe_allow_html=True)
                             elif "in carico" in stato_mov_test or "in consegna" in stato_mov_test:
-                                st.info(f"🚚 **IN CONSEGNA** — Spedizione caricata sul furgone il: `{data_mov}`")
+                                st.info(f"🚚 **IN CONSEGNA** — Spedizione caricata sul mezzo il: `{data_mov}`")
                             elif "consegnato" in stato_mov_test:
                                 st.success(f"✅ **CONSEGNATO** — Merce consegnata con successo il: `{data_mov}`")
                             elif "respinto" in stato_mov_test:
