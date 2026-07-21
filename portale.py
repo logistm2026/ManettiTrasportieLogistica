@@ -124,7 +124,7 @@ with st.spinner("Connessione ai server in corso, attendere..."):
 # 3. SCHERMATA DI LOGIN
 # ==========================================
 if not st.session_state["autenticato"]:
-    st.markdown("<h1 style='text-align: center;'>🔒 Accesso Portale Tracking Manetti</h1>", unsafe_allow_html=True)
+    st.markdown("<h1 style='text-align: center;'>🔒 Accesso Portale TP Manetti</h1>", unsafe_allow_html=True)
     st.markdown("<p style='text-align: center; color: gray;'>Inserisci le tue credenziali per verificare lo stato delle spedizioni.</p>", unsafe_allow_html=True)
     
     with st.form("form_login", clear_on_submit=False):
