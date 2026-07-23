@@ -6,7 +6,7 @@ import math
 from oauth2client.service_account import ServiceAccountCredentials
 
 # CONFIGURAZIONE PAGINA
-st.set_page_config(page_title="Portale Fornitori - Tracking", page_icon="🌐", layout="wide")
+st.set_page_config(page_title="Portale Fornitori - Tracking", page_icon="📦", layout="wide")
 
 # NASCONDI INTERFACCIA STREAMLIT
 nascondi_menu = """
@@ -99,9 +99,14 @@ def verifica_login(username, password, doc_google):
         st.error(f"Errore durante la verifica delle credenziali: {e}")
         return None
 
-# FUNZIONE PER RESETTARE LA PAGINA SE CAMBIA IL FILTRO
+# ==========================================
+# FUNZIONI CALLBACK E GESTIONE STATO
+# ==========================================
 def resetta_pagina():
     st.session_state["pagina_corrente"] = 1
+
+def apri_dettaglio_pacco(id_pacco):
+    st.session_state["id_pacco_selezionato"] = id_pacco
 
 # INIZIALIZZAZIONE STATO DELLA SESSIONE
 if "autenticato" not in st.session_state:
@@ -262,7 +267,6 @@ else:
                             stato_mov_test = stato_mov_puro.lower()
                             data_mov = mov.get('Data Ora', mov.get('Data_Ora', 'N/D'))
                             
-                            # IL BLOCCO "IN MAGAZZINO" È RIMASTO INTONSO COME DA TUA RICHIESTA
                             if "in magazzino" in stato_mov_test:
                                 st.markdown("""
                                     <div style="
@@ -384,9 +388,14 @@ else:
                         c3.markdown(f"<p style='margin-top:8px;'>`{pacco.get('Stato', '')}`</p>", unsafe_allow_html=True)
                         
                         with c4:
-                            if st.button("Apri ➔", key=f"btn_apri_{index}", use_container_width=True):
-                                st.session_state["id_pacco_selezionato"] = pacco.get('ID_Pacco')
-                                st.rerun()
+                            # --- MODIFICA APPLICATA QUI ---
+                            st.button(
+                                "Apri ➔", 
+                                key=f"btn_apri_{index}", 
+                                use_container_width=True,
+                                on_click=apri_dettaglio_pacco,
+                                args=(pacco.get('ID_Pacco'),)
+                            )
                         
                         st.markdown("<hr style='margin: 6px 0px; opacity: 0.15;'>", unsafe_allow_html=True)
                     
