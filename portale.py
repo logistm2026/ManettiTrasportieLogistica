@@ -388,13 +388,14 @@ else:
                         c3.markdown(f"<p style='margin-top:8px;'>`{pacco.get('Stato', '')}`</p>", unsafe_allow_html=True)
                         
                         with c4:
-                            # --- MODIFICA APPLICATA QUI ---
+                            # --- BOTTONE BLINDATO CON CHIAVE UNIVOCA E STRINGA ---
+                            id_sicuro = str(pacco.get('ID_Pacco', index))
                             st.button(
                                 "Apri ➔", 
-                                key=f"btn_apri_{index}", 
+                                key=f"btn_apri_{id_sicuro}", 
                                 use_container_width=True,
                                 on_click=apri_dettaglio_pacco,
-                                args=(pacco.get('ID_Pacco'),)
+                                args=(id_sicuro,)
                             )
                         
                         st.markdown("<hr style='margin: 6px 0px; opacity: 0.15;'>", unsafe_allow_html=True)
