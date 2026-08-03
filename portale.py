@@ -218,7 +218,8 @@ else:
                         elif filtro_tempo == "Quest'anno":
                             df_filtrato = df_filtrato[date_convertite.dt.year == oggi.year]
                             
-                    df_filtrato = df_filtrato.iloc[::-1]
+                    # Fonde Logistica e Archivio in un'unica linea temporale dal più recente al più vecchio
+                    df_filtrato = df_filtrato.sort_values(by="Ordinamento", ascending=False)
                 else:
                     df_filtrato = pd.DataFrame()
                     st.error("Nessun dato valido disponibile o Fornitore non configurato.")
