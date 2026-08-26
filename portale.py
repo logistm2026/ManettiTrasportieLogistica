@@ -172,10 +172,15 @@ else:
     # UI FILTRO TEMPORALE GLOBALE
     col_filtro, _ = st.columns([1.5, 3])
     with col_filtro:
-        filtro_tempo = st.selectbox(
-            "📅 Visualizza spedizioni di:",
-            ["Tutto", "Oggi", "Ultimi 5 giorni", "Ultimi 15 giorni", "Ultimo mese", "Ultimi 3 mesi", "Ultimi 6 mesi", "Quest'anno"],
-            index=4,
+        oggi = pd.Timestamp.today().date()
+        un_mese_fa = oggi - pd.Timedelta(days=30)
+        
+        # Genera un calendario con range di date, impostato di default sull'ultimo mese
+        date_selezionate = st.date_input(
+            "📅 Seleziona il periodo:",
+            value=(un_mese_fa, oggi),
+            max_value=oggi, # Impedisce di selezionare date future
+            format="DD/MM/YYYY",
             on_change=resetta_pagina 
         )
 
@@ -195,28 +200,28 @@ else:
                 if not df_totale.empty and 'Fornitore' in df_totale.columns:
                     df_filtrato = df_totale[df_totale['Fornitore'] == st.session_state["fornitore_nome"]]
                     
-                    if 'Ordinamento' in df_filtrato.columns and filtro_tempo != "Tutto":
+                    if 'Ordinamento' in df_filtrato.columns:
+                        # Estrae l'anno/mese/giorno dai primi 8 caratteri dell'ID e li converte
                         date_convertite = pd.to_datetime(
                             df_filtrato['Ordinamento'].astype(str).str[:8], 
                             format='%Y%m%d', 
                             errors='coerce'
                         )
-                        oggi = pd.Timestamp.today().normalize()
                         
-                        if filtro_tempo == "Oggi":
-                            df_filtrato = df_filtrato[date_convertite >= oggi]
-                        elif filtro_tempo == "Ultimi 5 giorni":
-                            df_filtrato = df_filtrato[date_convertite >= (oggi - pd.Timedelta(days=5))]
-                        elif filtro_tempo == "Ultimi 15 giorni":
-                            df_filtrato = df_filtrato[date_convertite >= (oggi - pd.Timedelta(days=15))]
-                        elif filtro_tempo == "Ultimo mese":
-                            df_filtrato = df_filtrato[date_convertite >= (oggi - pd.Timedelta(days=30))]
-                        elif filtro_tempo == "Ultimi 3 mesi":
-                            df_filtrato = df_filtrato[date_convertite >= (oggi - pd.Timedelta(days=90))]
-                        elif filtro_tempo == "Ultimi 6 mesi":
-                            df_filtrato = df_filtrato[date_convertite >= (oggi - pd.Timedelta(days=180))]
-                        elif filtro_tempo == "Quest'anno":
-                            df_filtrato = df_filtrato[date_convertite.dt.year == oggi.year]
+                        # Gestione dinamica dell'input del calendario
+                        if len(date_selezionate) == 2:
+                            data_inizio, data_fine = date_selezionate
+                            start_ts = pd.Timestamp(data_inizio)
+                            end_ts = pd.Timestamp(data_fine)
+                            
+                            # Filtra mantenendo i pacchi compresi tra le due date scelte
+                            df_filtrato = df_filtrato[(date_convertite >= start_ts) & (date_convertite <= end_ts)]
+                            
+                        elif len(date_selezionate) == 1:
+                            # Se l'utente ha cliccato solo la prima data e sta scegliendo la seconda,
+                            # mostra temporaneamente solo i pacchi di quel singolo giorno.
+                            data_singola = pd.Timestamp(date_selezionate[0])
+                            df_filtrato = df_filtrato[date_convertite == data_singola]
                             
                     # Fonde Logistica e Archivio in un'unica linea temporale dal più recente al più vecchio
                     df_filtrato = df_filtrato.sort_values(by="Ordinamento", ascending=False)
