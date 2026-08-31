@@ -45,7 +45,7 @@ def inizializza_connessioni_google():
 # ==========================================
 # 2. CARICAMENTO DATI (CON CACHE DI MEMORIA)
 # ==========================================
-@st.cache_data(ttl=1)
+@st.cache_data(ttl=600)
 def cached_get_fornitori(_doc_google):
     foglio_fornitori = _doc_google.worksheet("Fornitori")
     return pd.DataFrame(foglio_fornitori.get_all_records())
