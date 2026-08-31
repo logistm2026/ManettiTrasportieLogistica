@@ -45,7 +45,7 @@ def inizializza_connessioni_google():
 # ==========================================
 # 2. CARICAMENTO DATI (CON CACHE DI MEMORIA)
 # ==========================================
-@st.cache_data(ttl=600)
+@st.cache_data(ttl=1)
 def cached_get_fornitori(_doc_google):
     foglio_fornitori = _doc_google.worksheet("Fornitori")
     return pd.DataFrame(foglio_fornitori.get_all_records())
@@ -90,7 +90,15 @@ def cached_get_storico(_doc_google, _doc_archivio):
 def verifica_login(username, password, doc_google):
     try:
         dati_fornitori = cached_get_fornitori(doc_google)
-        utente = dati_fornitori[(dati_fornitori['Username'] == username) & (dati_fornitori['Password'] == str(password))]
+        
+        dati_fornitori['Username'] = dati_fornitori['Username'].astype(str).str.strip().str.lower()
+        
+        dati_fornitori['Password'] = dati_fornitori['Password'].astype(str).str.strip()
+        
+        username_pulito = str(username).strip().lower()
+        password_pulita = str(password).strip()
+
+        utente = dati_fornitori[(dati_fornitori['Username'] == username_pulito) & (dati_fornitori['Password'] == password_pulita)]
         
         if not utente.empty:
             return utente.iloc[0]['Nome_Fornitore']
